@@ -116,8 +116,9 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
   min-height: auto;
   cursor: pointer;
 }
-.profile-form {
-  margin: 0;
+.profile-menu {
+  position: relative;
+  display: inline-grid;
 }
 .profile-button {
   display: inline-grid;
@@ -146,6 +147,50 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--primary) 14%, var(--surface-strong));
+}
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 20;
+  width: min(260px, calc(100vw - 28px));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 10px;
+  background: var(--surface-strong);
+  box-shadow: var(--shadow);
+}
+.profile-summary {
+  display: grid;
+  gap: 3px;
+  padding: 8px 8px 12px;
+}
+.profile-summary strong,
+.profile-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-summary strong {
+  color: var(--ink);
+  font-size: .94rem;
+}
+.profile-summary span {
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 750;
+}
+.profile-dropdown form {
+  margin: 0;
+}
+.profile-dropdown button {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface-strong));
+  color: var(--danger);
+  font-weight: 900;
 }
 .theme-toggle {
   display: inline-flex;
@@ -589,7 +634,7 @@ fieldset { margin: 0; border: 0; padding: 0; }
   .nav { align-items: flex-start; }
   .nav-actions {
     align-items: flex-end;
-    flex-direction: column;
+    flex-direction: row;
   }
   .nav a, .auth-form button, .google-button, .theme-toggle { padding: 9px 12px; font-size: .9rem; }
   .theme-toggle { padding: 0; }

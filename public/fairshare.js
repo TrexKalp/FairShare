@@ -73,16 +73,23 @@ function renderProfileControl() {
   }
 
   const name = escapeHtml(state.user.name);
+  const email = state.user.email ? `<span>${escapeHtml(state.user.email)}</span>` : "";
   const picture = state.user.picture
     ? `<img src="${escapeHtml(state.user.picture)}" alt=""/>`
     : `<span>${escapeHtml(getInitials(state.user.name))}</span>`;
 
   return `
-    <form class="profile-form" method="post" action="/api/auth/logout" aria-label="Profile">
-      <button class="profile-button" type="submit" aria-label="Sign out ${name}" title="${name}">
+    <div class="profile-menu" data-profile-menu>
+      <button class="profile-button" type="button" data-profile-toggle aria-label="Open profile menu" aria-expanded="false" title="${name}">
         ${picture}
       </button>
-    </form>
+      <div class="profile-dropdown" data-profile-dropdown hidden>
+        <div class="profile-summary"><strong>${name}</strong>${email}</div>
+        <form method="post" action="/api/auth/logout">
+          <button type="submit">Sign out</button>
+        </form>
+      </div>
+    </div>
   `;
 }
 
@@ -254,6 +261,13 @@ async function joinInvitedTrip() {
 async function boot() {
   state.inviteTripId = getInviteTripId();
   await refreshSession();
+
+  if (!state.user) {
+    state.loading = false;
+    render();
+    return;
+  }
+
   if (!(await joinInvitedTrip())) {
     await refreshGroup(state.inviteTripId || state.activeTripId);
   }
@@ -368,15 +382,30 @@ function renderSignInScreen() {
         <h1 id="signinTitle">${inviteCopy.title}</h1>
         <p>${inviteCopy.body}</p>
         ${state.error ? `<div class="notice error">${escapeHtml(state.error)}</div>` : ""}
-        ${renderThemeToggle()}
         <a class="google-button signin-google" href="${getGoogleLoginUrl()}">${googleLogo}<span>Continue with Google</span></a>
       </section>
     </main>
   `;
-  bindThemeToggle();
+}
+
+function renderLoadingScreen() {
+  document.querySelector("#app").innerHTML = `
+    <main class="signin-screen">
+      <section class="signin-card" aria-live="polite">
+        <div class="brand signin-brand"><span class="brand-mark" aria-hidden="true"><img src="/fairshare-logo.png?v=2" alt=""/></span><span>FairShare</span></div>
+        <p class="eyebrow">Loading</p>
+        <h1>Checking your session.</h1>
+      </section>
+    </main>
+  `;
 }
 
 function render() {
+  if (state.loading) {
+    renderLoadingScreen();
+    return;
+  }
+
   if (!state.loading && !state.user) {
     renderSignInScreen();
     return;
@@ -478,6 +507,7 @@ function render() {
 
 function bindEvents() {
   bindThemeToggle();
+  bindProfileMenu();
 
   document.querySelector("#tripForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -598,6 +628,35 @@ function bindThemeToggle() {
     applyTheme();
     render();
   }));
+}
+
+function bindProfileMenu() {
+  const toggle = document.querySelector("[data-profile-toggle]");
+  const dropdown = document.querySelector("[data-profile-dropdown]");
+
+  if (!toggle || !dropdown) {
+    return;
+  }
+
+  function closeMenu() {
+    dropdown.hidden = true;
+    toggle.setAttribute("aria-expanded", "false");
+  }
+
+  toggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const isOpen = !dropdown.hidden;
+    if (isOpen) {
+      closeMenu();
+      return;
+    }
+
+    dropdown.hidden = false;
+    toggle.setAttribute("aria-expanded", "true");
+    window.setTimeout(() => document.addEventListener("click", closeMenu, { once: true }), 0);
+  });
+
+  dropdown.addEventListener("click", (event) => event.stopPropagation());
 }
 
 state.theme = getInitialTheme();

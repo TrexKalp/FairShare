@@ -97,26 +97,30 @@ function sendJson(response, statusCode, payload) {
 
 async function addPerson(request, response) {
   const body = await readJson(request);
-  sendJson(response, 200, await savePerson({ tripId: body.tripId, name: body.name }));
+  const user = await requireUser(request, response);
+  if (!user) return;
+  sendJson(response, 200, await savePerson({ tripId: body.tripId, name: body.name, user }));
 }
 
 async function addExpense(request, response) {
   const body = await readJson(request);
-  sendJson(response, 200, await saveExpense(body));
+  const user = await requireUser(request, response);
+  if (!user) return;
+  sendJson(response, 200, await saveExpense(body, user));
 }
 
-async function deleteExpense(request, response, pathname) {
+async function deleteExpense(request, response, pathname, user) {
   const expenseId = decodeURIComponent(pathname.replace("/api/expenses/", ""));
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
-  sendJson(response, 200, await removeExpense({ tripId: url.searchParams.get("tripId"), expenseId }));
+  sendJson(response, 200, await removeExpense({ tripId: url.searchParams.get("tripId"), expenseId, user }));
 }
 
-async function updateExpense(request, response, pathname) {
+async function updateExpense(request, response, pathname, user) {
   const expenseId = decodeURIComponent(pathname.replace("/api/expenses/", ""));
   const body = await readJson(request);
 
-  sendJson(response, 200, await saveExpenseUpdate({ ...body, expenseId }));
+  sendJson(response, 200, await saveExpenseUpdate({ ...body, expenseId, user }));
 }
 
 async function createTrip(request, response, user) {
@@ -154,7 +158,9 @@ async function handleApiRequest(request, response) {
     }
 
     if (request.method === "GET" && url.pathname === "/api/group") {
-      sendJson(response, 200, await getGroup(url.searchParams.get("tripId")));
+      const user = await requireUser(request, response);
+      if (!user) return true;
+      sendJson(response, 200, await getGroup(url.searchParams.get("tripId"), user));
       return true;
     }
 
@@ -173,26 +179,26 @@ async function handleApiRequest(request, response) {
     }
 
     if (request.method === "POST" && url.pathname === "/api/people") {
-      if (!(await requireUser(request, response))) return true;
       await addPerson(request, response);
       return true;
     }
 
     if (request.method === "POST" && url.pathname === "/api/expenses") {
-      if (!(await requireUser(request, response))) return true;
       await addExpense(request, response);
       return true;
     }
 
     if (request.method === "DELETE" && url.pathname.startsWith("/api/expenses/")) {
-      if (!(await requireUser(request, response))) return true;
-      await deleteExpense(request, response, url.pathname);
+      const user = await requireUser(request, response);
+      if (!user) return true;
+      await deleteExpense(request, response, url.pathname, user);
       return true;
     }
 
     if (request.method === "PATCH" && url.pathname.startsWith("/api/expenses/")) {
-      if (!(await requireUser(request, response))) return true;
-      await updateExpense(request, response, url.pathname);
+      const user = await requireUser(request, response);
+      if (!user) return true;
+      await updateExpense(request, response, url.pathname, user);
       return true;
     }
   } catch (error) {

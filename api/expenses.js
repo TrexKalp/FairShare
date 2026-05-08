@@ -8,8 +8,9 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    if (!(await requireUser(request, response))) return;
-    response.status(200).json(await addExpense(request.body));
+    const user = await requireUser(request, response);
+    if (!user) return;
+    response.status(200).json(await addExpense(request.body, user));
   } catch (error) {
     response.status(400).json({ error: error instanceof Error ? error.message : "Unknown server error." });
   }
