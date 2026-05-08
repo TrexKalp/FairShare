@@ -56,15 +56,28 @@ function renderThemeToggle() {
   `;
 }
 
+function expenseParticipants(expense) {
+  if (Array.isArray(expense.sharedBy) && expense.sharedBy.length > 0) {
+    return expense.sharedBy;
+  }
+
+  return expense.splitAll ? state.people : [];
+}
+
 function getBalances(people, expenses) {
   const balances = Object.fromEntries(people.map((person) => [person, 0]));
 
   expenses.forEach((expense) => {
-    balances[expense.paidBy] = roundCents((balances[expense.paidBy] || 0) + expense.amount);
-    const share = roundCents(expense.amount / expense.sharedBy.length);
+    const participants = expenseParticipants(expense);
+    if (participants.length === 0) {
+      return;
+    }
 
-    expense.sharedBy.forEach((person, index) => {
-      const adjustedShare = index === expense.sharedBy.length - 1 ? roundCents(expense.amount - share * (expense.sharedBy.length - 1)) : share;
+    balances[expense.paidBy] = roundCents((balances[expense.paidBy] || 0) + expense.amount);
+    const share = roundCents(expense.amount / participants.length);
+
+    participants.forEach((person, index) => {
+      const adjustedShare = index === participants.length - 1 ? roundCents(expense.amount - share * (participants.length - 1)) : share;
       balances[person] = roundCents((balances[person] || 0) - adjustedShare);
     });
   });
@@ -271,7 +284,7 @@ function renderLedger() {
         </div>
         <div class="expense-meta">
           <span>Paid by <b>${escapeHtml(expense.paidBy)}</b></span>
-          <span>Split with <b>${expense.splitAll ? "Everyone in trip" : expense.sharedBy.map(escapeHtml).join(", ")}</b></span>
+          <span>Split with <b>${expense.splitAll ? "Everyone in trip" : expenseParticipants(expense).map(escapeHtml).join(", ")}</b></span>
         </div>
       </div>
       <div class="expense-actions">
@@ -513,7 +526,7 @@ function bindEvents() {
 
     state.editingExpenseId = expense.id;
     state.splitAll = Boolean(expense.splitAll);
-    state.sharedBy = [...expense.sharedBy];
+    state.sharedBy = [...expenseParticipants(expense)];
     render();
     document.querySelector("#expenseForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }));

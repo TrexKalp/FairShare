@@ -192,10 +192,12 @@ export default function Home() {
   const [paidBy, setPaidBy] = useState(initialPeople[0]);
   const [sharedBy, setSharedBy] = useState(initialPeople);
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
   const balances = useMemo(() => getBalances(people, expenses), [people, expenses]);
   const settlements = useMemo(() => simplifyDebts(balances), [balances]);
   const totalSpend = expenses.reduce((total, expense) => total + expense.amount, 0);
+  const editingExpense = expenses.find((expense) => expense.id === editingExpenseId) || null;
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem("fairshare-theme");
@@ -232,7 +234,14 @@ export default function Home() {
     });
   }
 
-  function addExpense(event: FormEvent<HTMLFormElement>) {
+  function resetExpenseForm() {
+    setDescription("");
+    setAmount("");
+    setEditingExpenseId(null);
+    setSharedBy(people);
+  }
+
+  function saveExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsedAmount = Number(amount);
 
@@ -240,22 +249,37 @@ export default function Home() {
       return;
     }
 
-    setExpenses((currentExpenses) => [
-      {
-        id: crypto.randomUUID(),
-        description: description.trim(),
-        amount: roundCents(parsedAmount),
-        paidBy,
-        sharedBy,
-      },
-      ...currentExpenses,
-    ]);
-    setDescription("");
-    setAmount("");
+    const savedExpense = {
+      id: editingExpenseId || crypto.randomUUID(),
+      description: description.trim(),
+      amount: roundCents(parsedAmount),
+      paidBy,
+      sharedBy,
+    };
+
+    setExpenses((currentExpenses) => {
+      if (!editingExpenseId) {
+        return [savedExpense, ...currentExpenses];
+      }
+
+      return currentExpenses.map((expense) => (expense.id === editingExpenseId ? savedExpense : expense));
+    });
+    resetExpenseForm();
+  }
+
+  function editExpense(expense: Expense) {
+    setEditingExpenseId(expense.id);
+    setDescription(expense.description);
+    setAmount(String(expense.amount));
+    setPaidBy(expense.paidBy);
+    setSharedBy(expense.sharedBy);
   }
 
   function deleteExpense(id: string) {
     setExpenses((currentExpenses) => currentExpenses.filter((expense) => expense.id !== id));
+    if (editingExpenseId === id) {
+      resetExpenseForm();
+    }
   }
 
   return (
@@ -343,7 +367,7 @@ export default function Home() {
             <p className="eyebrow">Step 2</p>
             <h2>Add an expense</h2>
           </div>
-          <form className="expense-form" onSubmit={addExpense}>
+          <form className="expense-form" onSubmit={saveExpense}>
             <label htmlFor="description">What was it for?</label>
             <input
               id="description"
@@ -391,7 +415,12 @@ export default function Home() {
               </div>
             </fieldset>
 
-            <button className="wide-button" type="submit">Add expense</button>
+            <div className="form-actions">
+              <button className="wide-button" type="submit">{editingExpense ? "Save changes" : "Add expense"}</button>
+              {editingExpense ? (
+                <button className="secondary-button" type="button" onClick={resetExpenseForm}>Cancel</button>
+              ) : null}
+            </div>
           </form>
         </div>
       </section>
@@ -445,9 +474,14 @@ export default function Home() {
                 {expense.paidBy} paid {formatCurrency(expense.amount)} · split by {expense.sharedBy.join(", ")}
               </p>
             </div>
-            <button type="button" onClick={() => deleteExpense(expense.id)} aria-label={`Delete ${expense.description}`}>
-              Remove
-            </button>
+            <div className="expense-actions">
+              <button type="button" onClick={() => editExpense(expense)} aria-label={`Edit ${expense.description}`}>
+                Edit
+              </button>
+              <button type="button" onClick={() => deleteExpense(expense.id)} aria-label={`Delete ${expense.description}`}>
+                Delete
+              </button>
+            </div>
           </article>
         ))}
       </section>

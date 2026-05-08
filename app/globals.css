@@ -300,6 +300,7 @@ legend {
 
 .inline-form div,
 .form-grid,
+.form-actions,
 .checkbox-grid {
   display: grid;
   gap: 12px;
@@ -351,6 +352,10 @@ select:focus {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.form-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
 fieldset {
   margin: 0;
   border: 0;
@@ -381,6 +386,15 @@ fieldset {
   width: 100%;
   margin-top: 4px;
   padding-block: 15px;
+}
+
+.secondary-button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 13px 18px;
+  background: var(--surface-strong);
+  color: var(--primary-dark);
+  font-weight: 800;
 }
 
 .settlement-list,
@@ -448,6 +462,13 @@ fieldset {
   color: var(--muted);
 }
 
+.expense-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 820px) {
   main {
     width: min(100% - 20px, 680px);
@@ -480,7 +501,16 @@ fieldset {
   }
 
   .form-grid,
+  .form-actions,
   .inline-form div {
     grid-template-columns: 1fr;
+  }
+
+  .expense-actions {
+    justify-content: stretch;
+  }
+
+  .expense-actions button {
+    width: 100%;
   }
 }
