@@ -583,6 +583,22 @@ fieldset {
   font-size: 1.3rem;
   white-space: nowrap;
 }
+.receipt-ocr-status {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface-strong));
+  color: var(--primary);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+.receipt-ocr-status.error {
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+}
 
 .receipt-preview {
   width: 100%;

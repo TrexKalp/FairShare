@@ -762,6 +762,22 @@ fieldset { margin: 0; border: 0; padding: 0; }
   font-size: 1.15rem;
   white-space: nowrap;
 }
+.receipt-ocr-status {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--border));
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--primary) 10%, var(--surface-strong));
+  color: var(--primary-dark);
+  font-size: .9rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+.receipt-ocr-status.error {
+  border-color: rgba(185,75,75,.32);
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface-strong));
+  color: var(--danger);
+}
 .receipt-preview {
   width: 100%;
   max-height: 240px;
