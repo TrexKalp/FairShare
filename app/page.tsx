@@ -2,12 +2,22 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+type ReceiptItem = {
+  id: string;
+  name: string;
+  price: number;
+  assignedTo: string[];
+};
+
 type Expense = {
   id: string;
   description: string;
   amount: number;
   paidBy: string;
   sharedBy: string[];
+  receiptName?: string;
+  receiptPreview?: string;
+  items?: ReceiptItem[];
 };
 
 type Settlement = {
@@ -45,6 +55,10 @@ function roundCents(value: number) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function getUniquePeople(names: string[]) {
+  return [...new Set(names.filter(Boolean))];
+}
+
 function getBalances(people: string[], expenses: Expense[]) {
   const balances = Object.fromEntries(people.map((person) => [person, 0]));
 
@@ -53,7 +67,32 @@ function getBalances(people: string[], expenses: Expense[]) {
       balances[expense.paidBy] = 0;
     }
 
-    balances[expense.paidBy] = roundCents(balances[expense.paidBy] + expense.amount);
+    balances[expense.paidBy] = roundCents(
+      balances[expense.paidBy] + expense.amount,
+    );
+
+    if (expense.items?.length) {
+      expense.items.forEach((item) => {
+        const assignedPeople =
+          item.assignedTo.length > 0 ? item.assignedTo : expense.sharedBy;
+        const share = roundCents(item.price / assignedPeople.length);
+
+        assignedPeople.forEach((person, index) => {
+          const adjustedShare =
+            index === assignedPeople.length - 1
+              ? roundCents(item.price - share * (assignedPeople.length - 1))
+              : share;
+
+          if (!balances[person]) {
+            balances[person] = 0;
+          }
+
+          balances[person] = roundCents(balances[person] - adjustedShare);
+        });
+      });
+      return;
+    }
+
     const share = roundCents(expense.amount / expense.sharedBy.length);
 
     expense.sharedBy.forEach((person, index) => {
@@ -81,7 +120,10 @@ function settleGroup(balances: Record<string, number>): Settlement[] {
 
   const debtors = Object.entries(balances)
     .filter(([, amount]) => amount < -0.009)
-    .map(([person, amount]) => ({ person, amount: roundCents(Math.abs(amount)) }))
+    .map(([person, amount]) => ({
+      person,
+      amount: roundCents(Math.abs(amount)),
+    }))
     .sort((a, b) => b.amount - a.amount);
 
   const settlements: Settlement[] = [];
@@ -112,14 +154,18 @@ function settleGroup(balances: Record<string, number>): Settlement[] {
   return settlements;
 }
 
-function findOptimalZeroSumGroups(accounts: Array<{ person: string; amount: number }>) {
+function findOptimalZeroSumGroups(
+  accounts: Array<{ person: string; amount: number }>,
+) {
   const size = 1 << accounts.length;
   const sums = Array.from({ length: size }, () => 0);
 
   for (let mask = 1; mask < size; mask += 1) {
     const leastSignificantBit = mask & -mask;
     const index = Math.trunc(Math.log2(leastSignificantBit));
-    sums[mask] = roundCents(sums[mask ^ leastSignificantBit] + accounts[index].amount);
+    sums[mask] = roundCents(
+      sums[mask ^ leastSignificantBit] + accounts[index].amount,
+    );
   }
 
   const memo = new Map<number, number[]>();
@@ -171,13 +217,16 @@ function simplifyDebts(balances: Record<string, number>): Settlement[] {
   const groups = findOptimalZeroSumGroups(accounts);
 
   return groups.flatMap((group) => {
-    const groupBalances = accounts.reduce<Record<string, number>>((currentBalances, account, index) => {
-      if (group & (1 << index)) {
-        currentBalances[account.person] = account.amount;
-      }
+    const groupBalances = accounts.reduce<Record<string, number>>(
+      (currentBalances, account, index) => {
+        if (group & (1 << index)) {
+          currentBalances[account.person] = account.amount;
+        }
 
-      return currentBalances;
-    }, {});
+        return currentBalances;
+      },
+      {},
+    );
 
     return settleGroup(groupBalances);
   });
@@ -191,18 +240,40 @@ export default function Home() {
   const [amount, setAmount] = useState("");
   const [paidBy, setPaidBy] = useState(initialPeople[0]);
   const [sharedBy, setSharedBy] = useState(initialPeople);
+  const [receiptName, setReceiptName] = useState("");
+  const [receiptPreview, setReceiptPreview] = useState("");
+  const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([]);
+  const [itemName, setItemName] = useState("");
+  const [itemPrice, setItemPrice] = useState("");
+  const [itemAssignedTo, setItemAssignedTo] = useState<string[]>(initialPeople);
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
 
-  const balances = useMemo(() => getBalances(people, expenses), [people, expenses]);
+  const balances = useMemo(
+    () => getBalances(people, expenses),
+    [people, expenses],
+  );
   const settlements = useMemo(() => simplifyDebts(balances), [balances]);
-  const totalSpend = expenses.reduce((total, expense) => total + expense.amount, 0);
-  const editingExpense = expenses.find((expense) => expense.id === editingExpenseId) || null;
+  const totalSpend = expenses.reduce(
+    (total, expense) => total + expense.amount,
+    0,
+  );
+  const receiptItemsTotal = roundCents(
+    receiptItems.reduce((total, item) => total + item.price, 0),
+  );
+  const editingExpense =
+    expenses.find((expense) => expense.id === editingExpenseId) || null;
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem("fairshare-theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    setTheme(storedTheme === "dark" || (!storedTheme && prefersDark) ? "dark" : "light");
+    const prefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)",
+    ).matches;
+    setTheme(
+      storedTheme === "dark" || (!storedTheme && prefersDark)
+        ? "dark"
+        : "light",
+    );
   }, []);
 
   useEffect(() => {
@@ -221,17 +292,102 @@ export default function Home() {
     setPeople((currentPeople) => [...currentPeople, normalizedName]);
     setPaidBy((currentPaidBy) => currentPaidBy || normalizedName);
     setSharedBy((currentSharedBy) => [...currentSharedBy, normalizedName]);
+    setItemAssignedTo((currentAssignedTo) => [
+      ...currentAssignedTo,
+      normalizedName,
+    ]);
     setNewPerson("");
   }
 
   function toggleSharedPerson(person: string) {
     setSharedBy((currentSharedBy) => {
       if (currentSharedBy.includes(person)) {
-        return currentSharedBy.filter((sharedPerson) => sharedPerson !== person);
+        return currentSharedBy.filter(
+          (sharedPerson) => sharedPerson !== person,
+        );
       }
 
       return [...currentSharedBy, person];
     });
+  }
+
+  function toggleItemAssignedPerson(person: string) {
+    setItemAssignedTo((currentAssignedTo) => {
+      if (currentAssignedTo.includes(person)) {
+        return currentAssignedTo.filter(
+          (assignedPerson) => assignedPerson !== person,
+        );
+      }
+
+      return [...currentAssignedTo, person];
+    });
+  }
+
+  function toggleReceiptItemPerson(itemId: string, person: string) {
+    setReceiptItems((currentItems) =>
+      currentItems.map((item) => {
+        if (item.id !== itemId) {
+          return item;
+        }
+
+        const assignedTo = item.assignedTo.includes(person)
+          ? item.assignedTo.filter(
+              (assignedPerson) => assignedPerson !== person,
+            )
+          : [...item.assignedTo, person];
+
+        return { ...item, assignedTo };
+      }),
+    );
+  }
+
+  function addReceiptItem() {
+    const normalizedName = itemName.trim();
+    const parsedPrice = Number(itemPrice);
+
+    if (!normalizedName || parsedPrice <= 0 || itemAssignedTo.length === 0) {
+      return;
+    }
+
+    setReceiptItems((currentItems) => [
+      ...currentItems,
+      {
+        id: crypto.randomUUID(),
+        name: normalizedName,
+        price: roundCents(parsedPrice),
+        assignedTo: getUniquePeople(itemAssignedTo),
+      },
+    ]);
+    setItemName("");
+    setItemPrice("");
+    setItemAssignedTo(sharedBy.length > 0 ? sharedBy : people);
+  }
+
+  function deleteReceiptItem(itemId: string) {
+    setReceiptItems((currentItems) =>
+      currentItems.filter((item) => item.id !== itemId),
+    );
+  }
+
+  function handleReceiptUpload(file: File | undefined) {
+    if (!file) {
+      setReceiptName("");
+      setReceiptPreview("");
+      return;
+    }
+
+    setReceiptName(file.name);
+
+    if (!file.type.startsWith("image/")) {
+      setReceiptPreview("");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      setReceiptPreview(typeof reader.result === "string" ? reader.result : "");
+    });
+    reader.readAsDataURL(file);
   }
 
   function resetExpenseForm() {
@@ -239,13 +395,30 @@ export default function Home() {
     setAmount("");
     setEditingExpenseId(null);
     setSharedBy(people);
+    setReceiptName("");
+    setReceiptPreview("");
+    setReceiptItems([]);
+    setItemName("");
+    setItemPrice("");
+    setItemAssignedTo(people);
   }
 
   function saveExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsedAmount = Number(amount);
+    const parsedAmount =
+      receiptItems.length > 0 ? receiptItemsTotal : Number(amount);
+    const assignedReceiptPeople = getUniquePeople(
+      receiptItems.flatMap((item) => item.assignedTo),
+    );
+    const normalizedSharedBy =
+      receiptItems.length > 0 ? assignedReceiptPeople : sharedBy;
 
-    if (!description.trim() || !paidBy || sharedBy.length === 0 || parsedAmount <= 0) {
+    if (
+      !description.trim() ||
+      !paidBy ||
+      normalizedSharedBy.length === 0 ||
+      parsedAmount <= 0
+    ) {
       return;
     }
 
@@ -254,7 +427,10 @@ export default function Home() {
       description: description.trim(),
       amount: roundCents(parsedAmount),
       paidBy,
-      sharedBy,
+      sharedBy: normalizedSharedBy,
+      receiptName: receiptName || undefined,
+      receiptPreview: receiptPreview || undefined,
+      items: receiptItems.length > 0 ? receiptItems : undefined,
     };
 
     setExpenses((currentExpenses) => {
@@ -262,7 +438,9 @@ export default function Home() {
         return [savedExpense, ...currentExpenses];
       }
 
-      return currentExpenses.map((expense) => (expense.id === editingExpenseId ? savedExpense : expense));
+      return currentExpenses.map((expense) =>
+        expense.id === editingExpenseId ? savedExpense : expense,
+      );
     });
     resetExpenseForm();
   }
@@ -273,10 +451,16 @@ export default function Home() {
     setAmount(String(expense.amount));
     setPaidBy(expense.paidBy);
     setSharedBy(expense.sharedBy);
+    setReceiptName(expense.receiptName || "");
+    setReceiptPreview(expense.receiptPreview || "");
+    setReceiptItems(expense.items || []);
+    setItemAssignedTo(expense.sharedBy.length > 0 ? expense.sharedBy : people);
   }
 
   function deleteExpense(id: string) {
-    setExpenses((currentExpenses) => currentExpenses.filter((expense) => expense.id !== id));
+    setExpenses((currentExpenses) =>
+      currentExpenses.filter((expense) => expense.id !== id),
+    );
     if (editingExpenseId === id) {
       resetExpenseForm();
     }
@@ -298,7 +482,11 @@ export default function Home() {
               type="button"
               aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
               aria-pressed={theme === "dark"}
-              onClick={() => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))}
+              onClick={() =>
+                setTheme((currentTheme) =>
+                  currentTheme === "dark" ? "light" : "dark",
+                )
+              }
             >
               <span className="theme-icon" aria-hidden="true">
                 {theme === "dark" ? (
@@ -313,7 +501,11 @@ export default function Home() {
                 )}
               </span>
             </button>
-            <button className="profile-button" type="button" aria-label="Profile">
+            <button
+              className="profile-button"
+              type="button"
+              aria-label="Profile"
+            >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="8" r="4" />
                 <path d="M4 21a8 8 0 0 1 16 0" />
@@ -325,21 +517,34 @@ export default function Home() {
         <div className="hero-grid">
           <div className="hero-copy">
             <p className="eyebrow">Splitwise-style shared expense balancing</p>
-            <h1>Split trips, rent, dinners, and group costs without the spreadsheet chaos.</h1>
+            <h1>
+              Split trips, rent, dinners, and group costs without the
+              spreadsheet chaos.
+            </h1>
             <p>
-              Add the people in your group, record who paid, choose who shared each cost, and FairShare
-              calculates the fewest practical payments needed to settle everyone up.
+              Add the people in your group, record who paid, upload receipts,
+              assign individual menu items, and FairShare calculates the fewest
+              practical payments needed to settle everyone up.
             </p>
             <div className="hero-actions">
-              <a className="button primary" href="#expenses">Start balancing</a>
-              <a className="button ghost" href="#settle">See settlements</a>
+              <a className="button primary" href="#expenses">
+                Start balancing
+              </a>
+              <a className="button ghost" href="#receipt-upload">
+                Split a receipt
+              </a>
+              <a className="button ghost" href="#settle">
+                See settlements
+              </a>
             </div>
           </div>
 
           <div className="summary-card" aria-label="Current group summary">
             <p>Total group spend</p>
             <strong>{formatCurrency(totalSpend)}</strong>
-            <span>{expenses.length} expenses across {people.length} people</span>
+            <span>
+              {expenses.length} expenses across {people.length} people
+            </span>
           </div>
         </div>
       </section>
@@ -364,7 +569,9 @@ export default function Home() {
           </form>
           <div className="chips" aria-label="People in this group">
             {people.map((person) => (
-              <span className="chip" key={person}>{person}</span>
+              <span className="chip" key={person}>
+                {person}
+              </span>
             ))}
           </div>
         </div>
@@ -391,16 +598,25 @@ export default function Home() {
                   type="number"
                   min="0.01"
                   step="0.01"
-                  value={amount}
+                  value={
+                    receiptItems.length > 0 ? String(receiptItemsTotal) : amount
+                  }
                   onChange={(event) => setAmount(event.target.value)}
                   placeholder="0.00"
+                  readOnly={receiptItems.length > 0}
                 />
               </div>
               <div>
                 <label htmlFor="paidBy">Paid by</label>
-                <select id="paidBy" value={paidBy} onChange={(event) => setPaidBy(event.target.value)}>
+                <select
+                  id="paidBy"
+                  value={paidBy}
+                  onChange={(event) => setPaidBy(event.target.value)}
+                >
                   {people.map((person) => (
-                    <option key={person} value={person}>{person}</option>
+                    <option key={person} value={person}>
+                      {person}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -422,10 +638,133 @@ export default function Home() {
               </div>
             </fieldset>
 
+            <div className="receipt-builder" id="receipt-upload">
+              <div className="receipt-builder-heading">
+                <div>
+                  <label htmlFor="receiptFile">Receipt upload</label>
+                  <p>
+                    Upload a receipt image, then add each menu item and assign
+                    it to the people who ordered it.
+                  </p>
+                </div>
+                {receiptItems.length > 0 ? (
+                  <strong>{formatCurrency(receiptItemsTotal)}</strong>
+                ) : null}
+              </div>
+              <input
+                id="receiptFile"
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(event) =>
+                  handleReceiptUpload(event.target.files?.[0])
+                }
+              />
+              {receiptName ? (
+                <p className="receipt-file-name">Attached: {receiptName}</p>
+              ) : null}
+              {receiptPreview ? (
+                <img
+                  className="receipt-preview"
+                  src={receiptPreview}
+                  alt={`Preview of ${receiptName}`}
+                />
+              ) : null}
+
+              <div className="receipt-item-entry">
+                <div>
+                  <label htmlFor="itemName">Menu item</label>
+                  <input
+                    id="itemName"
+                    value={itemName}
+                    onChange={(event) => setItemName(event.target.value)}
+                    placeholder="e.g. Veggie ramen"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="itemPrice">Price</label>
+                  <input
+                    id="itemPrice"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={itemPrice}
+                    onChange={(event) => setItemPrice(event.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <fieldset>
+                  <legend>Assign item to</legend>
+                  <div className="checkbox-grid compact">
+                    {people.map((person) => (
+                      <label className="checkbox-card" key={person}>
+                        <input
+                          type="checkbox"
+                          checked={itemAssignedTo.includes(person)}
+                          onChange={() => toggleItemAssignedPerson(person)}
+                        />
+                        <span>{person}</span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={addReceiptItem}
+                >
+                  Add item
+                </button>
+              </div>
+
+              {receiptItems.length > 0 ? (
+                <div
+                  className="receipt-item-list"
+                  aria-label="Receipt menu items"
+                >
+                  {receiptItems.map((item) => (
+                    <article className="receipt-line-item" key={item.id}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span>{formatCurrency(item.price)}</span>
+                      </div>
+                      <div className="line-item-people">
+                        {people.map((person) => (
+                          <label className="mini-check" key={person}>
+                            <input
+                              type="checkbox"
+                              checked={item.assignedTo.includes(person)}
+                              onChange={() =>
+                                toggleReceiptItemPerson(item.id, person)
+                              }
+                            />
+                            <span>{person}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => deleteReceiptItem(item.id)}
+                      >
+                        Remove
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
             <div className="form-actions">
-              <button className="wide-button" type="submit">{editingExpense ? "Save changes" : "Add expense"}</button>
+              <button className="wide-button" type="submit">
+                {editingExpense ? "Save changes" : "Add expense"}
+              </button>
               {editingExpense ? (
-                <button className="secondary-button" type="button" onClick={resetExpenseForm}>Cancel</button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={resetExpenseForm}
+                >
+                  Cancel
+                </button>
               ) : null}
             </div>
           </form>
@@ -443,8 +782,12 @@ export default function Home() {
           ) : (
             <ol className="settlement-list">
               {settlements.map((settlement) => (
-                <li key={`${settlement.from}-${settlement.to}-${settlement.amount}`}>
-                  <span>{settlement.from} pays {settlement.to}</span>
+                <li
+                  key={`${settlement.from}-${settlement.to}-${settlement.amount}`}
+                >
+                  <span>
+                    {settlement.from} pays {settlement.to}
+                  </span>
                   <strong>{formatCurrency(settlement.amount)}</strong>
                 </li>
               ))}
@@ -461,7 +804,9 @@ export default function Home() {
             {Object.entries(balances).map(([person, balance]) => (
               <div className="balance-row" key={person}>
                 <span>{person}</span>
-                <strong className={balance >= 0 ? "positive" : "negative"}>{formatCurrency(balance)}</strong>
+                <strong className={balance >= 0 ? "positive" : "negative"}>
+                  {formatCurrency(balance)}
+                </strong>
               </div>
             ))}
           </div>
@@ -478,14 +823,38 @@ export default function Home() {
             <div>
               <h3>{expense.description}</h3>
               <p>
-                {expense.paidBy} paid {formatCurrency(expense.amount)} · split by {expense.sharedBy.join(", ")}
+                {expense.paidBy} paid {formatCurrency(expense.amount)} · split
+                by {expense.sharedBy.join(", ")}
+                {expense.receiptName
+                  ? ` · receipt: ${expense.receiptName}`
+                  : ""}
               </p>
+              {expense.items?.length ? (
+                <ul className="expense-item-breakdown">
+                  {expense.items.map((item) => (
+                    <li key={item.id}>
+                      <span>
+                        {item.name} · {item.assignedTo.join(", ")}
+                      </span>
+                      <strong>{formatCurrency(item.price)}</strong>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
             <div className="expense-actions">
-              <button type="button" onClick={() => editExpense(expense)} aria-label={`Edit ${expense.description}`}>
+              <button
+                type="button"
+                onClick={() => editExpense(expense)}
+                aria-label={`Edit ${expense.description}`}
+              >
                 Edit
               </button>
-              <button type="button" onClick={() => deleteExpense(expense.id)} aria-label={`Delete ${expense.description}`}>
+              <button
+                type="button"
+                onClick={() => deleteExpense(expense.id)}
+                aria-label={`Delete ${expense.description}`}
+              >
                 Delete
               </button>
             </div>
