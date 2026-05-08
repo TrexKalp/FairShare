@@ -70,9 +70,15 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
   height: 42px;
   place-items: center;
   border-radius: 12px;
-  background: var(--primary);
-  color: white;
-  letter-spacing: 0;
+  overflow: hidden;
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
+}
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .nav-actions {
   display: flex;

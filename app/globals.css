@@ -113,9 +113,16 @@ main {
   height: 42px;
   place-items: center;
   border-radius: 14px;
-  background: var(--primary);
-  color: white;
-  letter-spacing: -0.08em;
+  overflow: hidden;
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .nav-actions {

@@ -333,7 +333,7 @@ function renderSignInScreen() {
   document.querySelector("#app").innerHTML = `
     <main class="signin-screen">
       <section class="signin-card" aria-labelledby="signinTitle">
-        <div class="brand signin-brand"><span class="brand-mark">FS</span><span>FairShare</span></div>
+        <div class="brand signin-brand"><span class="brand-mark" aria-hidden="true"><img src="/fairshare-logo.png?v=2" alt=""/></span><span>FairShare</span></div>
         <p class="eyebrow">${inviteCopy.eyebrow}</p>
         <h1 id="signinTitle">${inviteCopy.title}</h1>
         <p>${inviteCopy.body}</p>
@@ -371,7 +371,7 @@ function render() {
     <main>
       <header class="app-header">
         <nav class="nav" aria-label="Primary navigation">
-          <div class="brand"><span class="brand-mark">FS</span><span>FairShare</span></div>
+          <div class="brand"><span class="brand-mark" aria-hidden="true"><img src="/fairshare-logo.png?v=2" alt=""/></span><span>FairShare</span></div>
           <div class="nav-actions">${renderThemeToggle()}<a href="#expenseForm">Add expense</a>${authControl}</div>
         </nav>
         <section class="mobile-hero">

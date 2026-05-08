@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createServer } from "node:http";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,15 @@ const requiredFiles = [
   "app/globals.css",
   "public/fairshare.js",
   "public/fairshare.css",
+  "public/fairshare-logo.png",
+  "public/apple-touch-icon.png",
+  "public/favicon.png",
+];
+
+const publicAssets = [
+  { path: "fairshare-logo.png", type: "image/png" },
+  { path: "apple-touch-icon.png", type: "image/png" },
+  { path: "favicon.png", type: "image/png" },
 ];
 
 function assertProjectFiles() {
@@ -194,6 +203,23 @@ async function handleApiRequest(request, response) {
   return false;
 }
 
+async function handlePublicAsset(request, response) {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+  const asset = publicAssets.find((currentAsset) => url.pathname === `/${currentAsset.path}`);
+
+  if (!asset) {
+    return false;
+  }
+
+  const body = await readFile(path.join(root, "public", asset.path));
+  response.writeHead(200, {
+    "cache-control": "public, max-age=31536000, immutable",
+    "content-type": asset.type,
+  });
+  response.end(body);
+  return true;
+}
+
 async function getHtml() {
   const css = await readFile(path.join(root, "public/fairshare.css"), "utf8");
   const js = await readFile(path.join(root, "public/fairshare.js"), "utf8");
@@ -205,6 +231,8 @@ async function getHtml() {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>FairShare | Expense Balancer</title>
     <meta name="description" content="Track shared expenses and calculate the simplest set of payments to settle up." />
+    <link rel="icon" type="image/png" href="/favicon.png?v=2" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
     <style>${css}</style>
   </head>
   <body>
@@ -221,6 +249,7 @@ async function build() {
   const outDir = path.join(root, "out");
   await mkdir(outDir, { recursive: true });
   await writeFile(path.join(outDir, "index.html"), html);
+  await Promise.all(publicAssets.map((asset) => copyFile(path.join(root, "public", asset.path), path.join(outDir, asset.path))));
   console.log("FairShare build complete: out/index.html");
 }
 
@@ -230,6 +259,10 @@ async function serve() {
   const server = createServer(async (_request, response) => {
     try {
       if (await handleApiRequest(_request, response)) {
+        return;
+      }
+
+      if (await handlePublicAsset(_request, response)) {
         return;
       }
 

@@ -287,7 +287,9 @@ export default function Home() {
       <section className="hero">
         <nav className="nav" aria-label="Primary navigation">
           <div className="brand">
-            <span className="brand-mark">FS</span>
+            <span className="brand-mark" aria-hidden="true">
+              <img src="/fairshare-logo.png?v=2" alt="" />
+            </span>
             <span>FairShare</span>
           </div>
           <div className="nav-actions">
