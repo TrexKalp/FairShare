@@ -113,13 +113,35 @@ async function api(path, options = {}) {
     headers: { "content-type": "application/json" },
     ...options,
   });
-  const payload = await response.json();
+  const text = await response.text();
+  let payload = null;
+
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = { error: text };
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(payload.error || "Something went wrong.");
+    throw new Error(payload?.error || `Request failed with status ${response.status}.`);
   }
 
   return payload;
+}
+
+function isGroupPayload(group) {
+  return group && Array.isArray(group.trips) && Array.isArray(group.people) && Array.isArray(group.expenses);
+}
+
+async function apiGroupFallback(group) {
+  if (isGroupPayload(group)) {
+    return group;
+  }
+
+  const query = state.activeTripId ? `?tripId=${encodeURIComponent(state.activeTripId)}` : "";
+  return api(`/api/group${query}`);
 }
 
 function activeTrip() {
@@ -501,7 +523,7 @@ function bindEvents() {
         });
         state.editingExpenseId = null;
         state.splitAll = false;
-        return group;
+        return apiGroupFallback(group);
       });
       return;
     }
@@ -537,7 +559,7 @@ function bindEvents() {
       if (state.editingExpenseId === button.dataset.delete) {
         state.editingExpenseId = null;
       }
-      return group;
+      return apiGroupFallback(group);
     });
   }));
 }
