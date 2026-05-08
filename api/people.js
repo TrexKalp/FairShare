@@ -1,4 +1,5 @@
 const { addPerson } = require("../lib/fairshare-db.cjs");
+const { requireUser } = require("../lib/fairshare-auth.cjs");
 
 module.exports = async function handler(request, response) {
   if (request.method !== "POST") {
@@ -7,6 +8,7 @@ module.exports = async function handler(request, response) {
   }
 
   try {
+    if (!(await requireUser(request, response))) return;
     response.status(200).json(await addPerson({ tripId: request.body?.tripId, name: request.body?.name }));
   } catch (error) {
     response.status(400).json({ error: error instanceof Error ? error.message : "Unknown server error." });

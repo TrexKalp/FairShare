@@ -1,6 +1,6 @@
 # FairShare
 
-FairShare is a shared trip expense balancer. Create trips, add people, record shared expenses from multiple browsers, and instantly see the simplest settlement plan for each trip.
+FairShare is a shared trip expense balancer. Create trips, share a join link, record shared expenses from multiple browsers, and instantly see the simplest settlement plan for each trip.
 
 ## Getting started
 
@@ -15,14 +15,18 @@ Create `.env.local` before starting the app:
 
 ```bash
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
 ```
 
 ## Features
 
 - Add group members.
 - Create and switch between different trips.
+- Share a trip link so signed-in people join automatically.
 - Add trip expenses with payer, amount, description, and participants.
 - Persist the shared ledger in Neon Postgres.
+- Sign in and out with Google.
 - Calculate per-person balances.
 - Generate a simplified settlement plan that minimizes the number of payments.
 - Remove expenses from the ledger and recalculate instantly.

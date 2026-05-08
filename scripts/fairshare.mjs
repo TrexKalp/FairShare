@@ -4,13 +4,22 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import fairshareAuth from "../lib/fairshare-auth.cjs";
 import fairshareDb from "../lib/fairshare-db.cjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const command = process.argv[2] ?? "dev";
 const port = Number(process.env.PORT ?? 3000);
-const { addExpense: saveExpense, addPerson: savePerson, addTrip, deleteExpense: removeExpense, getGroup } = fairshareDb;
+const { handleGoogleCallback, logout, requireUser, sendSession, startGoogleLogin } = fairshareAuth;
+const {
+  addExpense: saveExpense,
+  addPerson: savePerson,
+  createTripForUser,
+  deleteExpense: removeExpense,
+  getGroup,
+  joinTrip,
+} = fairshareDb;
 
 const requiredFiles = [
   "app/page.tsx",
@@ -93,36 +102,73 @@ async function deleteExpense(request, response, pathname) {
   sendJson(response, 200, await removeExpense({ tripId: url.searchParams.get("tripId"), expenseId }));
 }
 
-async function createTrip(request, response) {
+async function createTrip(request, response, user) {
   const body = await readJson(request);
-  sendJson(response, 200, await addTrip(body.name));
+  sendJson(response, 200, await createTripForUser({ name: body.name, user }));
+}
+
+async function joinExistingTrip(request, response, user) {
+  const body = await readJson(request);
+  sendJson(response, 200, await joinTrip({ tripId: body.tripId, user }));
 }
 
 async function handleApiRequest(request, response) {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   try {
+    if (request.method === "GET" && url.pathname === "/api/auth/google") {
+      await startGoogleLogin(request, response);
+      return true;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/auth/google/callback") {
+      await handleGoogleCallback(request, response);
+      return true;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/auth/session") {
+      await sendSession(request, response);
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/logout") {
+      await logout(request, response);
+      return true;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/group") {
       sendJson(response, 200, await getGroup(url.searchParams.get("tripId")));
       return true;
     }
 
     if (request.method === "POST" && url.pathname === "/api/trips") {
-      await createTrip(request, response);
+      const user = await requireUser(request, response);
+      if (!user) return true;
+      await createTrip(request, response, user);
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/trips/join") {
+      const user = await requireUser(request, response);
+      if (!user) return true;
+      await joinExistingTrip(request, response, user);
       return true;
     }
 
     if (request.method === "POST" && url.pathname === "/api/people") {
+      if (!(await requireUser(request, response))) return true;
       await addPerson(request, response);
       return true;
     }
 
     if (request.method === "POST" && url.pathname === "/api/expenses") {
+      if (!(await requireUser(request, response))) return true;
       await addExpense(request, response);
       return true;
     }
 
     if (request.method === "DELETE" && url.pathname.startsWith("/api/expenses/")) {
+      if (!(await requireUser(request, response))) return true;
       await deleteExpense(request, response, url.pathname);
       return true;
     }

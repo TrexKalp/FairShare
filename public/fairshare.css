@@ -53,7 +53,14 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
   color: white;
   letter-spacing: 0;
 }
-.nav a {
+.nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.nav a, .auth-form button, .google-button {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 10px 14px;
@@ -61,6 +68,53 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
   color: var(--primary-dark);
   font-weight: 800;
   white-space: nowrap;
+}
+.auth-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+}
+.auth-form span {
+  max-width: 150px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: .9rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.auth-form button {
+  min-height: auto;
+  cursor: pointer;
+}
+.signin-panel {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  min-width: 0;
+}
+.signin-panel > span {
+  color: var(--muted);
+  font-size: .74rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.google-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  background: white;
+  color: #202124;
+  box-shadow: 0 4px 14px rgba(32, 33, 36, .08);
+}
+.google-mark {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
 }
 .mobile-hero { padding: 8px 18px 22px; }
 .eyebrow {
@@ -116,6 +170,21 @@ h1 {
 
 .notice { margin-top: 16px; border-radius: 16px; padding: 14px 16px; font-weight: 800; }
 .notice.error { border: 1px solid rgba(185,75,75,.32); background: #fff0f0; color: var(--danger); }
+.notice.auth-required {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid rgba(37,111,77,.2);
+  background: #eef7ef;
+  color: var(--primary-dark);
+}
+.notice.auth-required span {
+  flex: 1;
+  color: var(--muted);
+  font-weight: 750;
+}
+.notice.auth-required .google-button { flex: 0 0 auto; white-space: nowrap; }
 
 .trip-shell {
   display: grid;
@@ -195,6 +264,44 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px 
   color: white;
 }
 .trip-panel select { margin-top: 16px; }
+.share-box {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  border: 1px solid rgba(37,111,77,.18);
+  border-radius: 16px;
+  padding: 14px;
+  background: #eef7ef;
+}
+.share-box label {
+  color: var(--primary-dark);
+  font-size: .82rem;
+  font-weight: 900;
+}
+.share-box div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.share-box input {
+  min-height: 44px;
+  background: white;
+  font-size: .9rem;
+}
+.share-box button {
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 10px 13px;
+  background: var(--primary);
+  color: white;
+  font-weight: 900;
+}
+.share-box p, .helper-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: .92rem;
+  line-height: 1.45;
+}
 
 .chips {
   display: flex;
@@ -317,14 +424,33 @@ fieldset { margin: 0; border: 0; padding: 0; }
   .app-header { border-radius: 0 0 24px 24px; border-top: 0; }
   .nav { padding: 12px; }
   .brand-mark { width: 38px; height: 38px; }
-  .nav a { padding: 9px 12px; font-size: .9rem; }
+  .nav { align-items: flex-start; }
+  .nav-actions {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+  .nav a, .auth-form button, .google-button { padding: 9px 12px; font-size: .9rem; }
+  .auth-form { justify-content: flex-end; }
+  .auth-form span { max-width: 120px; font-size: .82rem; }
+  .signin-panel > span { display: none; }
+  .google-button span:last-child { display: none; }
   .mobile-hero { padding: 4px 14px 18px; }
   h1 { font-size: clamp(2rem, 12vw, 3rem); }
   .stats-grid div { padding: 13px; }
   .trip-shell, .results-grid, .expenses-list { margin-top: 12px; }
+  .notice.auth-required {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .notice.auth-required .google-button {
+    justify-content: center;
+    width: 100%;
+  }
+  .notice.auth-required .google-button span:last-child { display: inline; }
   .workspace { gap: 12px; }
   .panel { border-radius: 18px; padding: 16px; }
   .inline-form div, .form-grid { grid-template-columns: 1fr; }
+  .share-box div { grid-template-columns: 1fr; }
   .checkbox-grid { grid-template-columns: 1fr; }
   .expense-item {
     grid-template-columns: 1fr;

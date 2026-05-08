@@ -1,4 +1,5 @@
 const { deleteExpense } = require("../../lib/fairshare-db.cjs");
+const { requireUser } = require("../../lib/fairshare-auth.cjs");
 
 module.exports = async function handler(request, response) {
   if (request.method !== "DELETE") {
@@ -7,6 +8,7 @@ module.exports = async function handler(request, response) {
   }
 
   try {
+    if (!(await requireUser(request, response))) return;
     const id = Array.isArray(request.query.id) ? request.query.id[0] : request.query.id;
     const tripId = Array.isArray(request.query.tripId) ? request.query.tripId[0] : request.query.tripId;
     response.status(200).json(await deleteExpense({ tripId, expenseId: id }));

@@ -7,12 +7,23 @@ const state = {
   loading: true,
   saving: false,
   error: "",
+  user: null,
+  inviteTripId: null,
+  copiedShareLink: false,
 };
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const roundCents = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
 const money = (value) => currency.format(value);
 const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]);
+const googleLogo = `
+  <svg class="google-mark" aria-hidden="true" viewBox="0 0 24 24">
+    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+    <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"/>
+    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06L5.84 9.9C6.71 7.3 9.14 5.38 12 5.38z"/>
+  </svg>
+`;
 
 function getBalances(people, expenses) {
   const balances = Object.fromEntries(people.map((person) => [person, 0]));
@@ -96,6 +107,62 @@ async function refreshGroup(tripId = state.activeTripId) {
   }
 }
 
+async function refreshSession() {
+  try {
+    const session = await api("/api/auth/session");
+    state.user = session.user;
+  } catch {
+    state.user = null;
+  }
+}
+
+function getInviteTripId() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("trip");
+}
+
+function getTripLink(tripId = state.activeTripId) {
+  return `${window.location.origin}/?trip=${encodeURIComponent(tripId)}`;
+}
+
+function getGoogleLoginUrl() {
+  return `/api/auth/google?returnTo=${encodeURIComponent(`${window.location.pathname}${window.location.search}${window.location.hash}`)}`;
+}
+
+async function joinInvitedTrip() {
+  if (!state.inviteTripId || !state.user) {
+    return false;
+  }
+
+  state.saving = true;
+  state.error = "";
+  render();
+
+  try {
+    setGroup(await api("/api/trips/join", {
+      method: "POST",
+      body: JSON.stringify({ tripId: state.inviteTripId }),
+    }));
+    state.inviteTripId = null;
+    window.history.replaceState({}, "", "/");
+    return true;
+  } catch (error) {
+    state.error = error instanceof Error ? error.message : "Could not join that trip.";
+    return false;
+  } finally {
+    state.saving = false;
+    render();
+  }
+}
+
+async function boot() {
+  state.inviteTripId = getInviteTripId();
+  await refreshSession();
+  if (!(await joinInvitedTrip())) {
+    await refreshGroup(state.inviteTripId || state.activeTripId);
+  }
+}
+
 async function saveAction(action) {
   state.saving = true;
   state.error = "";
@@ -128,7 +195,7 @@ function renderTripOptions() {
 
 function renderPeople() {
   if (state.people.length === 0) {
-    return `<span class="empty-inline">No people in this trip yet.</span>`;
+    return `<span class="empty-inline">No one has joined this trip yet.</span>`;
   }
 
   return state.people.map((person) => `<span class="chip">${escapeHtml(person)}</span>`).join("");
@@ -141,7 +208,7 @@ function renderSharedBy() {
 
   return state.people.map((person) => `
     <label class="checkbox-card">
-      <input type="checkbox" data-person="${escapeHtml(person)}" ${state.sharedBy.includes(person) ? "checked" : ""} ${state.saving ? "disabled" : ""}/>
+      <input type="checkbox" data-person="${escapeHtml(person)}" ${state.sharedBy.includes(person) ? "checked" : ""} ${state.saving || !state.user ? "disabled" : ""}/>
       <span>${escapeHtml(person)}</span>
     </label>
   `).join("");
@@ -164,7 +231,7 @@ function renderLedger() {
           <span>Split with <b>${expense.sharedBy.map(escapeHtml).join(", ")}</b></span>
         </div>
       </div>
-      <button type="button" data-delete="${escapeHtml(expense.id)}" ${state.saving ? "disabled" : ""}>Remove</button>
+      <button type="button" data-delete="${escapeHtml(expense.id)}" ${state.saving || !state.user ? "disabled" : ""}>Remove</button>
     </article>
   `).join("");
 }
@@ -176,19 +243,24 @@ function render() {
   const totalSpend = state.expenses.reduce((total, expense) => total + expense.amount, 0);
   const hasTrip = Boolean(state.activeTripId);
   const hasPeople = state.people.length > 0;
+  const canEdit = Boolean(state.user);
   const status = state.loading ? "Loading..." : state.saving ? "Saving..." : "Synced";
+  const authControl = state.user
+    ? `<form class="auth-form" method="post" action="/api/auth/logout"><span>${escapeHtml(state.user.name)}</span><button type="submit">Sign out</button></form>`
+    : `<div class="signin-panel" aria-label="Sign in"><span>Sign in</span><a class="google-button" href="${getGoogleLoginUrl()}">${googleLogo}<span>Continue with Google</span></a></div>`;
+  const shareLink = hasTrip ? getTripLink(state.activeTripId) : "";
 
   document.querySelector("#app").innerHTML = `
     <main>
       <header class="app-header">
         <nav class="nav" aria-label="Primary navigation">
           <div class="brand"><span class="brand-mark">FS</span><span>FairShare</span></div>
-          <a href="#expenseForm">Add expense</a>
+          <div class="nav-actions"><a href="#expenseForm">Add expense</a>${authControl}</div>
         </nav>
         <section class="mobile-hero">
           <p class="eyebrow">Shared trip ledger</p>
           <h1>${trip ? escapeHtml(trip.name) : "Plan a trip together"}</h1>
-          <p>Add trips, invite everyone to use the same page, and settle up from one shared list.</p>
+          <p>Create a trip, share its link, and each person joins with Google so their name is added automatically.</p>
         </section>
         <section class="stats-grid" aria-label="Trip summary">
           <div><span>Total</span><strong>${money(totalSpend)}</strong></div>
@@ -199,24 +271,24 @@ function render() {
       </header>
 
       ${state.error ? `<div class="notice error">${escapeHtml(state.error)}</div>` : ""}
+      ${state.inviteTripId && !state.user ? `<div class="notice auth-required"><strong>Trip invite</strong><span>Sign in with Google to join this trip automatically.</span><a class="google-button" href="${getGoogleLoginUrl()}">${googleLogo}<span>Continue with Google</span></a></div>` : ""}
+      ${!canEdit && !state.inviteTripId ? `<div class="notice auth-required"><strong>Sign in required</strong><span>Use Google login before creating trips or adding expenses.</span><a class="google-button" href="${getGoogleLoginUrl()}">${googleLogo}<span>Continue with Google</span></a></div>` : ""}
 
       <section class="trip-shell">
         <aside class="panel trip-panel">
           <div class="section-heading"><p class="eyebrow">Trips</p><h2>Choose a trip</h2></div>
           <form class="inline-form" id="tripForm">
             <label for="tripName">New trip</label>
-            <div><input id="tripName" placeholder="e.g. Lisbon weekend" ${state.saving ? "disabled" : ""}/><button type="submit" ${state.saving ? "disabled" : ""}>Add</button></div>
+            <div><input id="tripName" placeholder="e.g. Lisbon weekend" ${state.saving || !canEdit ? "disabled" : ""}/><button type="submit" ${state.saving || !canEdit ? "disabled" : ""}>Add</button></div>
           </form>
           ${renderTripOptions()}
+          ${hasTrip ? `<div class="share-box"><label for="shareLink">Share trip link</label><div><input id="shareLink" value="${escapeHtml(shareLink)}" readonly/><button type="button" id="copyShareLink">${state.copiedShareLink ? "Copied" : "Copy"}</button></div><p>When someone opens this link and signs in, they join this trip automatically.</p></div>` : ""}
         </aside>
 
         <section class="workspace">
           <div class="panel people-panel">
-            <div class="section-heading"><p class="eyebrow">People</p><h2>Who's on this trip?</h2></div>
-            <form class="inline-form" id="personForm">
-              <label for="personName">Add a person</label>
-              <div><input id="personName" placeholder="e.g. Morgan" ${!hasTrip || state.saving ? "disabled" : ""}/><button type="submit" ${!hasTrip || state.saving ? "disabled" : ""}>Add</button></div>
-            </form>
+            <div class="section-heading"><p class="eyebrow">People</p><h2>Joined this trip</h2></div>
+            <p class="helper-text">Share the trip link instead of adding people manually.</p>
             <div class="chips" aria-label="People in this trip">${renderPeople()}</div>
           </div>
 
@@ -224,13 +296,13 @@ function render() {
             <div class="section-heading"><p class="eyebrow">Expense</p><h2>Add an expense</h2></div>
             <form class="expense-form" id="expenseForm">
               <label for="description">What was it for?</label>
-              <input id="description" placeholder="Hotel, groceries, tickets..." ${!hasPeople || state.saving ? "disabled" : ""}/>
+              <input id="description" placeholder="Hotel, groceries, tickets..." ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/>
               <div class="form-grid">
-                <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" ${!hasPeople || state.saving ? "disabled" : ""}/></div>
-                <div><label for="paidBy">Paid by</label><select id="paidBy" ${!hasPeople || state.saving ? "disabled" : ""}>${state.people.map((person) => `<option value="${escapeHtml(person)}">${escapeHtml(person)}</option>`).join("")}</select></div>
+                <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/></div>
+                <div><label for="paidBy">Paid by</label><select id="paidBy" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${state.people.map((person) => `<option value="${escapeHtml(person)}">${escapeHtml(person)}</option>`).join("")}</select></div>
               </div>
               <fieldset><legend>Split with</legend><div class="checkbox-grid">${renderSharedBy()}</div></fieldset>
-              <button class="wide-button" type="submit" ${!hasPeople || state.saving ? "disabled" : ""}>Add expense</button>
+              <button class="wide-button" type="submit" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>Add expense</button>
             </form>
           </div>
         </section>
@@ -243,7 +315,7 @@ function render() {
         </div>
         <div class="panel">
           <div class="section-heading"><p class="eyebrow">Balances</p><h2>Who is owed?</h2></div>
-          <div class="balance-list">${hasPeople ? Object.entries(balances).map(([person, balance]) => `<div class="balance-row"><span>${escapeHtml(person)}</span><strong class="${balance >= 0 ? "positive" : "negative"}">${money(balance)}</strong></div>`).join("") : `<div class="empty-state">Add people to start the trip.</div>`}</div>
+          <div class="balance-list">${hasPeople ? Object.entries(balances).map(([person, balance]) => `<div class="balance-row"><span>${escapeHtml(person)}</span><strong class="${balance >= 0 ? "positive" : "negative"}">${money(balance)}</strong></div>`).join("") : `<div class="empty-state">Share the trip link so people can join.</div>`}</div>
         </div>
       </section>
 
@@ -264,6 +336,22 @@ function bindEvents() {
     saveAction(() => api("/api/trips", { method: "POST", body: JSON.stringify({ name }) }));
   });
 
+  document.querySelector("#copyShareLink")?.addEventListener("click", async () => {
+    const link = getTripLink();
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      document.querySelector("#shareLink")?.select();
+      document.execCommand("copy");
+    }
+    state.copiedShareLink = true;
+    render();
+    window.setTimeout(() => {
+      state.copiedShareLink = false;
+      render();
+    }, 1800);
+  });
+
   document.querySelector("#tripSelect")?.addEventListener("change", (event) => {
     state.loading = true;
     render();
@@ -275,15 +363,6 @@ function bindEvents() {
     render();
     refreshGroup(button.dataset.trip);
   }));
-
-  document.querySelector("#personForm").addEventListener("submit", (event) => {
-    event.preventDefault();
-    const input = document.querySelector("#personName");
-    const name = input.value.trim();
-    if (!name || state.people.includes(name) || !state.activeTripId) return;
-
-    saveAction(() => api("/api/people", { method: "POST", body: JSON.stringify({ tripId: state.activeTripId, name }) }));
-  });
 
   document.querySelectorAll("[data-person]").forEach((checkbox) => checkbox.addEventListener("change", () => {
     const person = checkbox.dataset.person;
@@ -309,4 +388,4 @@ function bindEvents() {
 }
 
 render();
-refreshGroup();
+boot();
