@@ -1,0 +1,17 @@
+{
+  "name": "splitwise-style-expense-balancer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A self-contained Splitwise-style expense balancer with a Next.js app structure.",
+  "scripts": {
+    "dev": "node scripts/fairshare.mjs dev",
+    "build": "node scripts/fairshare.mjs build",
+    "start": "node scripts/fairshare.mjs start",
+    "lint": "node scripts/fairshare.mjs lint"
+  },
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
