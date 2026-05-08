@@ -11,6 +11,8 @@ const state = {
   inviteTripId: null,
   copiedShareLink: false,
   editingExpenseId: null,
+  splitAll: false,
+  theme: "light",
 };
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -25,6 +27,32 @@ const googleLogo = `
     <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06L5.84 9.9C6.71 7.3 9.14 5.38 12 5.38z"/>
   </svg>
 `;
+
+function getInitialTheme() {
+  const storedTheme = window.localStorage.getItem("fairshare-theme");
+
+  if (storedTheme === "dark" || storedTheme === "light") {
+    return storedTheme;
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = state.theme;
+  window.localStorage.setItem("fairshare-theme", state.theme);
+}
+
+function renderThemeToggle() {
+  const nextTheme = state.theme === "dark" ? "light" : "dark";
+
+  return `
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to ${nextTheme} mode" aria-pressed="${state.theme === "dark"}">
+      <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+      <span>${state.theme === "dark" ? "Light" : "Dark"}</span>
+    </button>
+  `;
+}
 
 function getBalances(people, expenses) {
   const balances = Object.fromEntries(people.map((person) => [person, 0]));
@@ -183,6 +211,10 @@ function currentEditingExpense() {
   return state.expenses.find((expense) => expense.id === state.editingExpenseId) || null;
 }
 
+function isSplitAllActive() {
+  return state.splitAll;
+}
+
 function renderTripOptions() {
   if (state.trips.length === 0) {
     return `<div class="empty-state compact">Create a trip to start tracking expenses.</div>`;
@@ -211,6 +243,10 @@ function renderSharedBy() {
     return `<div class="empty-state compact">Add trip people before adding an expense.</div>`;
   }
 
+  if (isSplitAllActive()) {
+    return `<div class="empty-state compact">Everyone in this trip is included, including people who join later.</div>`;
+  }
+
   return state.people.map((person) => `
     <label class="checkbox-card">
       <input type="checkbox" data-person="${escapeHtml(person)}" ${state.sharedBy.includes(person) ? "checked" : ""} ${state.saving || !state.user ? "disabled" : ""}/>
@@ -233,7 +269,7 @@ function renderLedger() {
         </div>
         <div class="expense-meta">
           <span>Paid by <b>${escapeHtml(expense.paidBy)}</b></span>
-          <span>Split with <b>${expense.sharedBy.map(escapeHtml).join(", ")}</b></span>
+          <span>Split with <b>${expense.splitAll ? "Everyone in trip" : expense.sharedBy.map(escapeHtml).join(", ")}</b></span>
         </div>
       </div>
       <div class="expense-actions">
@@ -265,10 +301,12 @@ function renderSignInScreen() {
         <h1 id="signinTitle">${inviteCopy.title}</h1>
         <p>${inviteCopy.body}</p>
         ${state.error ? `<div class="notice error">${escapeHtml(state.error)}</div>` : ""}
+        ${renderThemeToggle()}
         <a class="google-button signin-google" href="${getGoogleLoginUrl()}">${googleLogo}<span>Continue with Google</span></a>
       </section>
     </main>
   `;
+  bindThemeToggle();
 }
 
 function render() {
@@ -285,6 +323,7 @@ function render() {
   const hasPeople = state.people.length > 0;
   const canEdit = Boolean(state.user);
   const editingExpense = currentEditingExpense();
+  const splitAllActive = isSplitAllActive();
   const status = state.loading ? "Loading..." : state.saving ? "Saving..." : "Synced";
   const authControl = state.user
     ? `<form class="auth-form" method="post" action="/api/auth/logout"><span>${escapeHtml(state.user.name)}</span><button type="submit">Sign out</button></form>`
@@ -296,7 +335,7 @@ function render() {
       <header class="app-header">
         <nav class="nav" aria-label="Primary navigation">
           <div class="brand"><span class="brand-mark">FS</span><span>FairShare</span></div>
-          <div class="nav-actions"><a href="#expenseForm">Add expense</a>${authControl}</div>
+          <div class="nav-actions">${renderThemeToggle()}<a href="#expenseForm">Add expense</a>${authControl}</div>
         </nav>
         <section class="mobile-hero">
           <p class="eyebrow">Shared trip ledger</p>
@@ -342,6 +381,7 @@ function render() {
                 <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" value="${editingExpense ? editingExpense.amount : ""}" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/></div>
                 <div><label for="paidBy">Paid by</label><select id="paidBy" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${state.people.map((person) => `<option value="${escapeHtml(person)}" ${person === editingExpense?.paidBy ? "selected" : ""}>${escapeHtml(person)}</option>`).join("")}</select></div>
               </div>
+              <label class="split-all-toggle"><input id="splitAll" type="checkbox" ${splitAllActive ? "checked" : ""} ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/><span>Split with everyone, including future joiners</span></label>
               <fieldset><legend>Split with</legend><div class="checkbox-grid">${renderSharedBy()}</div></fieldset>
               <div class="form-actions">
                 <button class="wide-button" type="submit" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${editingExpense ? "Save changes" : "Add expense"}</button>
@@ -372,6 +412,8 @@ function render() {
 }
 
 function bindEvents() {
+  bindThemeToggle();
+
   document.querySelector("#tripForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const name = document.querySelector("#tripName").value.trim();
@@ -413,14 +455,28 @@ function bindEvents() {
     state.sharedBy = checkbox.checked ? [...state.sharedBy, person] : state.sharedBy.filter((current) => current !== person);
   }));
 
+  document.querySelector("#splitAll")?.addEventListener("change", (event) => {
+    state.splitAll = event.target.checked;
+    if (state.splitAll) {
+      state.sharedBy = [...state.people];
+    } else {
+      const expense = currentEditingExpense();
+      if (expense) {
+        state.sharedBy = [...expense.sharedBy];
+      }
+    }
+    render();
+  });
+
   document.querySelector("#expenseForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const description = document.querySelector("#description").value.trim();
     const amount = Number(document.querySelector("#amount").value);
     const paidBy = document.querySelector("#paidBy").value;
-    if (!description || !paidBy || state.sharedBy.length === 0 || amount <= 0 || !state.activeTripId) return;
+    const splitAll = document.querySelector("#splitAll")?.checked || false;
+    if (!description || !paidBy || (!splitAll && state.sharedBy.length === 0) || amount <= 0 || !state.activeTripId) return;
 
-    const payload = { tripId: state.activeTripId, description, amount: roundCents(amount), paidBy, sharedBy: state.sharedBy };
+    const payload = { tripId: state.activeTripId, description, amount: roundCents(amount), paidBy, splitAll, sharedBy: splitAll ? [] : state.sharedBy };
 
     if (state.editingExpenseId) {
       saveAction(async () => {
@@ -429,16 +485,22 @@ function bindEvents() {
           body: JSON.stringify(payload),
         });
         state.editingExpenseId = null;
+        state.splitAll = false;
         return group;
       });
       return;
     }
 
-    saveAction(() => api("/api/expenses", { method: "POST", body: JSON.stringify(payload) }));
+    saveAction(async () => {
+      const group = await api("/api/expenses", { method: "POST", body: JSON.stringify(payload) });
+      state.splitAll = false;
+      return group;
+    });
   });
 
   document.querySelector("#cancelEdit")?.addEventListener("click", () => {
     state.editingExpenseId = null;
+    state.splitAll = false;
     state.sharedBy = [...state.people];
     render();
   });
@@ -448,6 +510,7 @@ function bindEvents() {
     if (!expense) return;
 
     state.editingExpenseId = expense.id;
+    state.splitAll = Boolean(expense.splitAll);
     state.sharedBy = [...expense.sharedBy];
     render();
     document.querySelector("#expenseForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -464,5 +527,15 @@ function bindEvents() {
   }));
 }
 
+function bindThemeToggle() {
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => button.addEventListener("click", () => {
+    state.theme = state.theme === "dark" ? "light" : "dark";
+    applyTheme();
+    render();
+  }));
+}
+
+state.theme = getInitialTheme();
+applyTheme();
 render();
 boot();
