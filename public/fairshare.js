@@ -45,11 +45,13 @@ function applyTheme() {
 
 function renderThemeToggle() {
   const nextTheme = state.theme === "dark" ? "light" : "dark";
+  const icon = state.theme === "dark"
+    ? `<svg viewBox="0 0 24 24" role="img"><path d="M20.2 14.1A7.2 7.2 0 0 1 9.9 3.8 8.6 8.6 0 1 0 20.2 14.1Z"></path></svg>`
+    : `<svg viewBox="0 0 24 24" role="img"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2.5M12 19.5V22M4.93 4.93 6.7 6.7M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07 6.7 17.3M17.3 6.7l1.77-1.77"></path></svg>`;
 
   return `
     <button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch to ${nextTheme} mode" aria-pressed="${state.theme === "dark"}">
-      <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
-      <span>${state.theme === "dark" ? "Light" : "Dark"}</span>
+      <span class="theme-icon" aria-hidden="true">${icon}</span>
     </button>
   `;
 }

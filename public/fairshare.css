@@ -113,38 +113,31 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
 .theme-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 9px 13px;
+  padding: 0;
   background: var(--surface-strong);
   color: var(--primary-dark);
   font-weight: 900;
   white-space: nowrap;
 }
-.toggle-track {
-  display: inline-flex;
-  align-items: center;
-  width: 34px;
+.theme-icon,
+.theme-icon svg {
+  display: block;
+  width: 20px;
   height: 20px;
-  border-radius: 999px;
-  padding: 3px;
-  background: var(--border);
 }
-.toggle-thumb {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--surface-strong);
-  box-shadow: 0 1px 5px rgba(0, 0, 0, .22);
-  transition: transform 180ms ease;
-}
-.theme-toggle[aria-pressed="true"] .toggle-track {
-  background: var(--primary);
-}
-.theme-toggle[aria-pressed="true"] .toggle-thumb {
-  transform: translateX(14px);
+.theme-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .signin-panel {
   display: grid;
@@ -562,6 +555,7 @@ fieldset { margin: 0; border: 0; padding: 0; }
     flex-direction: column;
   }
   .nav a, .auth-form button, .google-button, .theme-toggle { padding: 9px 12px; font-size: .9rem; }
+  .theme-toggle { padding: 0; }
   .auth-form { justify-content: flex-end; }
   .auth-form span { max-width: 120px; font-size: .82rem; }
   .signin-panel > span { display: none; }

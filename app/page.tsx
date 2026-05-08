@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Expense = {
   id: string;
@@ -191,10 +191,22 @@ export default function Home() {
   const [amount, setAmount] = useState("");
   const [paidBy, setPaidBy] = useState(initialPeople[0]);
   const [sharedBy, setSharedBy] = useState(initialPeople);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   const balances = useMemo(() => getBalances(people, expenses), [people, expenses]);
   const settlements = useMemo(() => simplifyDebts(balances), [balances]);
   const totalSpend = expenses.reduce((total, expense) => total + expense.amount, 0);
+
+  useEffect(() => {
+    const storedTheme = window.localStorage.getItem("fairshare-theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    setTheme(storedTheme === "dark" || (!storedTheme && prefersDark) ? "dark" : "light");
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem("fairshare-theme", theme);
+  }, [theme]);
 
   function addPerson(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -254,7 +266,29 @@ export default function Home() {
             <span className="brand-mark">FS</span>
             <span>FairShare</span>
           </div>
-          <a href="#expenses">Add expense</a>
+          <div className="nav-actions">
+            <button
+              className="theme-toggle"
+              type="button"
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+              aria-pressed={theme === "dark"}
+              onClick={() => setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"))}
+            >
+              <span className="theme-icon" aria-hidden="true">
+                {theme === "dark" ? (
+                  <svg viewBox="0 0 24 24" role="img">
+                    <path d="M20.2 14.1A7.2 7.2 0 0 1 9.9 3.8 8.6 8.6 0 1 0 20.2 14.1Z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" role="img">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2.5M12 19.5V22M4.93 4.93 6.7 6.7M17.3 17.3l1.77 1.77M2 12h2.5M19.5 12H22M4.93 19.07 6.7 17.3M17.3 6.7l1.77-1.77" />
+                  </svg>
+                )}
+              </span>
+            </button>
+            <a href="#expenses">Add expense</a>
+          </div>
         </nav>
 
         <div className="hero-grid">
