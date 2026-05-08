@@ -19,6 +19,7 @@ const {
   deleteExpense: removeExpense,
   getGroup,
   joinTrip,
+  updateExpense: saveExpenseUpdate,
 } = fairshareDb;
 
 const requiredFiles = [
@@ -102,6 +103,13 @@ async function deleteExpense(request, response, pathname) {
   sendJson(response, 200, await removeExpense({ tripId: url.searchParams.get("tripId"), expenseId }));
 }
 
+async function updateExpense(request, response, pathname) {
+  const expenseId = decodeURIComponent(pathname.replace("/api/expenses/", ""));
+  const body = await readJson(request);
+
+  sendJson(response, 200, await saveExpenseUpdate({ ...body, expenseId }));
+}
+
 async function createTrip(request, response, user) {
   const body = await readJson(request);
   sendJson(response, 200, await createTripForUser({ name: body.name, user }));
@@ -170,6 +178,12 @@ async function handleApiRequest(request, response) {
     if (request.method === "DELETE" && url.pathname.startsWith("/api/expenses/")) {
       if (!(await requireUser(request, response))) return true;
       await deleteExpense(request, response, url.pathname);
+      return true;
+    }
+
+    if (request.method === "PATCH" && url.pathname.startsWith("/api/expenses/")) {
+      if (!(await requireUser(request, response))) return true;
+      await updateExpense(request, response, url.pathname);
       return true;
     }
   } catch (error) {

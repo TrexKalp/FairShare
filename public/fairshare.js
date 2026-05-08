@@ -10,6 +10,7 @@ const state = {
   user: null,
   inviteTripId: null,
   copiedShareLink: false,
+  editingExpenseId: null,
 };
 
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -178,6 +179,10 @@ async function saveAction(action) {
   }
 }
 
+function currentEditingExpense() {
+  return state.expenses.find((expense) => expense.id === state.editingExpenseId) || null;
+}
+
 function renderTripOptions() {
   if (state.trips.length === 0) {
     return `<div class="empty-state compact">Create a trip to start tracking expenses.</div>`;
@@ -231,7 +236,10 @@ function renderLedger() {
           <span>Split with <b>${expense.sharedBy.map(escapeHtml).join(", ")}</b></span>
         </div>
       </div>
-      <button type="button" data-delete="${escapeHtml(expense.id)}" ${state.saving || !state.user ? "disabled" : ""}>Remove</button>
+      <div class="expense-actions">
+        <button type="button" data-edit="${escapeHtml(expense.id)}" ${state.saving || !state.user ? "disabled" : ""}>Edit</button>
+        <button type="button" data-delete="${escapeHtml(expense.id)}" ${state.saving || !state.user ? "disabled" : ""}>Delete</button>
+      </div>
     </article>
   `).join("");
 }
@@ -276,6 +284,7 @@ function render() {
   const hasTrip = Boolean(state.activeTripId);
   const hasPeople = state.people.length > 0;
   const canEdit = Boolean(state.user);
+  const editingExpense = currentEditingExpense();
   const status = state.loading ? "Loading..." : state.saving ? "Saving..." : "Synced";
   const authControl = state.user
     ? `<form class="auth-form" method="post" action="/api/auth/logout"><span>${escapeHtml(state.user.name)}</span><button type="submit">Sign out</button></form>`
@@ -325,16 +334,19 @@ function render() {
           </div>
 
           <div class="panel expense-panel">
-            <div class="section-heading"><p class="eyebrow">Expense</p><h2>Add an expense</h2></div>
+            <div class="section-heading"><p class="eyebrow">Expense</p><h2>${editingExpense ? "Edit expense" : "Add an expense"}</h2></div>
             <form class="expense-form" id="expenseForm">
               <label for="description">What was it for?</label>
-              <input id="description" placeholder="Hotel, groceries, tickets..." ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/>
+              <input id="description" placeholder="Hotel, groceries, tickets..." value="${escapeHtml(editingExpense?.description || "")}" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/>
               <div class="form-grid">
-                <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/></div>
-                <div><label for="paidBy">Paid by</label><select id="paidBy" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${state.people.map((person) => `<option value="${escapeHtml(person)}">${escapeHtml(person)}</option>`).join("")}</select></div>
+                <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" value="${editingExpense ? editingExpense.amount : ""}" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/></div>
+                <div><label for="paidBy">Paid by</label><select id="paidBy" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${state.people.map((person) => `<option value="${escapeHtml(person)}" ${person === editingExpense?.paidBy ? "selected" : ""}>${escapeHtml(person)}</option>`).join("")}</select></div>
               </div>
               <fieldset><legend>Split with</legend><div class="checkbox-grid">${renderSharedBy()}</div></fieldset>
-              <button class="wide-button" type="submit" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>Add expense</button>
+              <div class="form-actions">
+                <button class="wide-button" type="submit" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${editingExpense ? "Save changes" : "Add expense"}</button>
+                ${editingExpense ? `<button class="secondary-button" type="button" id="cancelEdit">Cancel</button>` : ""}
+              </div>
             </form>
           </div>
         </section>
@@ -408,14 +420,47 @@ function bindEvents() {
     const paidBy = document.querySelector("#paidBy").value;
     if (!description || !paidBy || state.sharedBy.length === 0 || amount <= 0 || !state.activeTripId) return;
 
-    saveAction(() => api("/api/expenses", {
-      method: "POST",
-      body: JSON.stringify({ tripId: state.activeTripId, description, amount: roundCents(amount), paidBy, sharedBy: state.sharedBy }),
-    }));
+    const payload = { tripId: state.activeTripId, description, amount: roundCents(amount), paidBy, sharedBy: state.sharedBy };
+
+    if (state.editingExpenseId) {
+      saveAction(async () => {
+        const group = await api(`/api/expenses/${encodeURIComponent(state.editingExpenseId)}`, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+        state.editingExpenseId = null;
+        return group;
+      });
+      return;
+    }
+
+    saveAction(() => api("/api/expenses", { method: "POST", body: JSON.stringify(payload) }));
   });
 
+  document.querySelector("#cancelEdit")?.addEventListener("click", () => {
+    state.editingExpenseId = null;
+    state.sharedBy = [...state.people];
+    render();
+  });
+
+  document.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => {
+    const expense = state.expenses.find((currentExpense) => currentExpense.id === button.dataset.edit);
+    if (!expense) return;
+
+    state.editingExpenseId = expense.id;
+    state.sharedBy = [...expense.sharedBy];
+    render();
+    document.querySelector("#expenseForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }));
+
   document.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", () => {
-    saveAction(() => api(`/api/expenses/${encodeURIComponent(button.dataset.delete)}?tripId=${encodeURIComponent(state.activeTripId || "")}`, { method: "DELETE" }));
+    saveAction(async () => {
+      const group = await api(`/api/expenses/${encodeURIComponent(button.dataset.delete)}?tripId=${encodeURIComponent(state.activeTripId || "")}`, { method: "DELETE" });
+      if (state.editingExpenseId === button.dataset.delete) {
+        state.editingExpenseId = null;
+      }
+      return group;
+    });
   }));
 }
 
