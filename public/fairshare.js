@@ -17,6 +17,9 @@ const state = {
   receiptName: "",
   receiptPreview: "",
   receiptItems: [],
+  receiptOcrStatus: "",
+  receiptOcrError: "",
+  receiptOcrTotal: null,
   expenseCurrency: null,
   theme: "light",
 };
@@ -59,6 +62,128 @@ const receiptSplitShares = () => {
 
   return shares;
 };
+
+const receiptOcrScriptUrl = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+let receiptOcrScriptPromise = null;
+const receiptSummaryWords = new Set(["subtotal", "sub total", "tax", "tip", "gratuity", "total", "amount", "balance", "change", "cash", "card", "visa", "mastercard", "amex", "debit", "credit", "paid", "payment", "auth", "approval", "receipt", "table", "server"]);
+
+function loadReceiptOcr() {
+  if (window.Tesseract?.recognize) {
+    return Promise.resolve(window.Tesseract);
+  }
+
+  if (!receiptOcrScriptPromise) {
+    receiptOcrScriptPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = receiptOcrScriptUrl;
+      script.async = true;
+      script.onload = () => window.Tesseract?.recognize ? resolve(window.Tesseract) : reject(new Error("OCR library did not load."));
+      script.onerror = () => reject(new Error("Could not load the OCR library."));
+      document.head.appendChild(script);
+    });
+  }
+
+  return receiptOcrScriptPromise;
+}
+
+function normalizeReceiptLine(line) {
+  return line.replace(/[|_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function receiptLineContainsSummaryWord(line) {
+  const lower = line.toLowerCase();
+  return [...receiptSummaryWords].some((word) => lower.includes(word));
+}
+
+function cleanReceiptItemName(name) {
+  return name
+    .replace(/^\d+\s*[xX*]?\s+/, "")
+    .replace(/\b(qty|quantity|item|price|each)\b/gi, "")
+    .replace(/[^a-z0-9&'./ -]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "");
+}
+
+function parseReceiptPrice(rawPrice) {
+  const normalized = rawPrice.replace(/[$,]/g, "").replace(/O/gi, "0");
+  const value = Number(normalized);
+  return Number.isFinite(value) && value > 0 ? roundCents(value) : 0;
+}
+
+function parseReceiptText(text) {
+  const items = [];
+  let detectedTotal = 0;
+
+  text.split(/\r?\n/).map(normalizeReceiptLine).filter(Boolean).forEach((line) => {
+    const priceMatches = [...line.matchAll(/\$?\d+[.,]\d{2}\b/g)];
+    if (priceMatches.length === 0) {
+      return;
+    }
+
+    const lastPriceMatch = priceMatches[priceMatches.length - 1];
+    const price = parseReceiptPrice(lastPriceMatch[0]);
+    if (price <= 0) {
+      return;
+    }
+
+    if (/\b(total|amount due|balance due)\b/i.test(line)) {
+      detectedTotal = Math.max(detectedTotal, price);
+      return;
+    }
+
+    if (receiptLineContainsSummaryWord(line)) {
+      return;
+    }
+
+    const name = cleanReceiptItemName(line.slice(0, lastPriceMatch.index));
+    if (!name || name.length < 2 || /^\d+$/.test(name)) {
+      return;
+    }
+
+    items.push({
+      id: crypto.randomUUID(),
+      name,
+      price,
+      assignedTo: uniquePeople(state.sharedBy.length > 0 ? state.sharedBy : state.people),
+    });
+  });
+
+  return { items: items.slice(0, 40), total: detectedTotal || null };
+}
+
+async function parseReceiptImage(file) {
+  state.receiptOcrStatus = "Reading receipt with OCR...";
+  state.receiptOcrError = "";
+  state.receiptOcrTotal = null;
+  render();
+
+  try {
+    const Tesseract = await loadReceiptOcr();
+    const result = await Tesseract.recognize(file, "eng");
+    const { items, total } = parseReceiptText(result?.data?.text || "");
+    state.receiptOcrTotal = total;
+
+    if (items.length > 0) {
+      state.receiptItems = items;
+      state.splitAll = false;
+      state.advancedSplit = true;
+      state.sharedBy = uniquePeople(items.flatMap((item) => item.assignedTo));
+      state.splitShares = receiptSplitShares();
+      state.receiptOcrStatus = `Parsed ${items.length} receipt item${items.length === 1 ? "" : "s"}. Review names, prices, and assignments before saving.`;
+    } else if (total) {
+      state.receiptOcrStatus = `OCR found a total of ${money(total, state.expenseCurrency || activeCurrency())}, but no itemized lines. Enter or adjust the expense amount manually.`;
+    } else {
+      state.receiptOcrStatus = "OCR finished, but no item prices were detected. Add items manually or try a clearer image.";
+    }
+  } catch (error) {
+    state.receiptOcrStatus = "";
+    state.receiptOcrError = error instanceof Error ? error.message : "OCR could not read this receipt.";
+  }
+
+  render();
+}
+
 const googleLogo = `
   <svg class="google-mark" aria-hidden="true" viewBox="0 0 24 24">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -430,12 +555,14 @@ function renderReceiptBuilder({ hasPeople, canEdit, selectedCurrency }) {
       <div class="receipt-builder-heading">
         <div>
           <label for="receiptFile">Receipt upload</label>
-          <p>Upload a receipt image, then add each menu item and assign it to the people who ordered it. Item totals automatically become a custom split.</p>
+          <p>Upload a receipt image and FairShare will use OCR to fill in itemized lines automatically. Review names, prices, and assignments before saving.</p>
         </div>
         ${state.receiptItems.length > 0 ? `<strong>${money(total, selectedCurrency)}</strong>` : ""}
       </div>
       <input id="receiptFile" type="file" accept="image/*,.pdf" ${disabled ? "disabled" : ""}/>
       ${state.receiptName ? `<p class="receipt-file-name">Attached: ${escapeHtml(state.receiptName)}</p>` : ""}
+      ${state.receiptOcrStatus ? `<p class="receipt-ocr-status">${escapeHtml(state.receiptOcrStatus)}</p>` : ""}
+      ${state.receiptOcrError ? `<p class="receipt-ocr-status error">${escapeHtml(state.receiptOcrError)}</p>` : ""}
       ${state.receiptPreview ? `<img class="receipt-preview" src="${state.receiptPreview}" alt="Preview of ${escapeHtml(state.receiptName)}"/>` : ""}
       <div class="receipt-item-entry">
         <div><label for="receiptItemName">Menu item</label><input id="receiptItemName" placeholder="e.g. Veggie ramen" ${disabled ? "disabled" : ""}/></div>
@@ -739,14 +866,23 @@ function bindEvents() {
     if (!file) {
       state.receiptName = "";
       state.receiptPreview = "";
+      state.receiptItems = [];
+      state.receiptOcrStatus = "";
+      state.receiptOcrError = "";
+      state.receiptOcrTotal = null;
       render();
       return;
     }
 
     state.receiptName = file.name;
     state.receiptPreview = "";
+    state.receiptItems = [];
+    state.receiptOcrStatus = "";
+    state.receiptOcrError = "";
+    state.receiptOcrTotal = null;
 
     if (!file.type.startsWith("image/")) {
+      state.receiptOcrError = "Automatic OCR currently supports receipt image files. Upload a JPG, PNG, or HEIC image, or add items manually.";
       render();
       return;
     }
@@ -757,6 +893,7 @@ function bindEvents() {
       render();
     });
     reader.readAsDataURL(file);
+    parseReceiptImage(file);
   });
 
   document.querySelector("#addReceiptItem")?.addEventListener("click", () => {
@@ -857,6 +994,9 @@ function bindEvents() {
         state.receiptName = "";
         state.receiptPreview = "";
         state.receiptItems = [];
+        state.receiptOcrStatus = "";
+        state.receiptOcrError = "";
+        state.receiptOcrTotal = null;
         return apiGroupFallback(group);
       });
       return;
@@ -871,6 +1011,9 @@ function bindEvents() {
       state.receiptName = "";
       state.receiptPreview = "";
       state.receiptItems = [];
+      state.receiptOcrStatus = "";
+      state.receiptOcrError = "";
+      state.receiptOcrTotal = null;
       return group;
     });
   });
@@ -901,6 +1044,9 @@ function bindEvents() {
     state.receiptName = expense.receiptName || "";
     state.receiptPreview = "";
     state.receiptItems = Array.isArray(expense.receiptItems) ? expense.receiptItems : [];
+    state.receiptOcrStatus = "";
+    state.receiptOcrError = "";
+    state.receiptOcrTotal = null;
     render();
     document.querySelector("#expenseForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }));

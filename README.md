@@ -25,7 +25,7 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 - Create and switch between different trips.
 - Share a trip link so signed-in people join automatically.
 - Add trip expenses with payer, amount, description, and participants.
-- Upload receipt images and assign itemized menu prices to the people who ordered them.
+- Upload receipt images, automatically parse itemized lines with OCR, and assign menu prices to the people who ordered them.
 - Persist the shared ledger in Neon Postgres.
 - Sign in and out with Google.
 - Calculate per-person balances.
