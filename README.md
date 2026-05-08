@@ -36,7 +36,7 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 
 Use these settings if you configure the project manually:
 
-- Install command: `npm install`
+- Install command: `npm ci`
 - Build command: `npm run build`
 - Output directory: `out`
 - Environment variable: `DATABASE_URL`
