@@ -4,11 +4,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import fairshareDb from "../lib/fairshare-db.cjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const command = process.argv[2] ?? "dev";
 const port = Number(process.env.PORT ?? 3000);
+const { addExpense: saveExpense, addPerson: savePerson, addTrip, deleteExpense: removeExpense, getGroup } = fairshareDb;
 
 const requiredFiles = [
   "app/page.tsx",
@@ -24,6 +26,112 @@ function assertProjectFiles() {
   if (missing.length > 0) {
     throw new Error(`Missing required FairShare files: ${missing.join(", ")}`);
   }
+}
+
+async function loadLocalEnv() {
+  const envPath = path.join(root, ".env.local");
+
+  if (!existsSync(envPath)) {
+    return;
+  }
+
+  const contents = await readFile(envPath, "utf8");
+  contents.split(/\r?\n/).forEach((line) => {
+    const trimmedLine = line.trim();
+
+    if (!trimmedLine || trimmedLine.startsWith("#")) {
+      return;
+    }
+
+    const separatorIndex = trimmedLine.indexOf("=");
+    if (separatorIndex === -1) {
+      return;
+    }
+
+    const key = trimmedLine.slice(0, separatorIndex).trim();
+    const value = trimmedLine.slice(separatorIndex + 1).trim();
+
+    if (key && !process.env[key]) {
+      process.env[key] = value;
+    }
+  });
+}
+
+async function readJson(request) {
+  const chunks = [];
+
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+
+  if (chunks.length === 0) {
+    return {};
+  }
+
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+function sendJson(response, statusCode, payload) {
+  response.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
+  response.end(JSON.stringify(payload));
+}
+
+async function addPerson(request, response) {
+  const body = await readJson(request);
+  sendJson(response, 200, await savePerson({ tripId: body.tripId, name: body.name }));
+}
+
+async function addExpense(request, response) {
+  const body = await readJson(request);
+  sendJson(response, 200, await saveExpense(body));
+}
+
+async function deleteExpense(request, response, pathname) {
+  const expenseId = decodeURIComponent(pathname.replace("/api/expenses/", ""));
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+  sendJson(response, 200, await removeExpense({ tripId: url.searchParams.get("tripId"), expenseId }));
+}
+
+async function createTrip(request, response) {
+  const body = await readJson(request);
+  sendJson(response, 200, await addTrip(body.name));
+}
+
+async function handleApiRequest(request, response) {
+  const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+
+  try {
+    if (request.method === "GET" && url.pathname === "/api/group") {
+      sendJson(response, 200, await getGroup(url.searchParams.get("tripId")));
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/trips") {
+      await createTrip(request, response);
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/people") {
+      await addPerson(request, response);
+      return true;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/expenses") {
+      await addExpense(request, response);
+      return true;
+    }
+
+    if (request.method === "DELETE" && url.pathname.startsWith("/api/expenses/")) {
+      await deleteExpense(request, response, url.pathname);
+      return true;
+    }
+  } catch (error) {
+    sendJson(response, 500, { error: error instanceof Error ? error.message : "Unknown server error" });
+    return true;
+  }
+
+  return false;
 }
 
 async function getHtml() {
@@ -57,9 +165,14 @@ async function build() {
 }
 
 async function serve() {
+  await loadLocalEnv();
   assertProjectFiles();
   const server = createServer(async (_request, response) => {
     try {
+      if (await handleApiRequest(_request, response)) {
+        return;
+      }
+
       const html = await getHtml();
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       response.end(html);

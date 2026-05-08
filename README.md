@@ -1,6 +1,6 @@
 # FairShare
 
-FairShare is a Splitwise-style expense balancer built with Next.js. Add people, record shared expenses, and instantly see the simplest settlement plan for the group.
+FairShare is a shared trip expense balancer. Create trips, add people, record shared expenses from multiple browsers, and instantly see the simplest settlement plan for each trip.
 
 ## Getting started
 
@@ -11,24 +11,29 @@ npm run dev
 
 Open http://localhost:3000 to use the app.
 
+Create `.env.local` before starting the app:
+
+```bash
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
+```
+
 ## Features
 
 - Add group members.
-- Add expenses with payer, amount, description, and participants.
+- Create and switch between different trips.
+- Add trip expenses with payer, amount, description, and participants.
+- Persist the shared ledger in Neon Postgres.
 - Calculate per-person balances.
 - Generate a simplified settlement plan that minimizes the number of payments.
 - Remove expenses from the ledger and recalculate instantly.
 
-## Install note
-
-This repository is intentionally self-contained so `npm install` succeeds even in restricted environments where external npm registry access is blocked. The source keeps a Next.js `app/` structure, while the included Node scripts provide local dev/build/start commands without downloading packages.
-
 ## Deploying to Vercel
 
-This project includes `vercel.json` so Vercel treats it as a static site instead of trying to auto-detect a Next.js runtime. Use these settings if you configure the project manually:
+Use these settings if you configure the project manually:
 
 - Install command: `npm install`
 - Build command: `npm run build`
 - Output directory: `out`
+- Environment variable: `DATABASE_URL`
 
-The rewrite in `vercel.json` sends all routes to `index.html`, which prevents Vercel `404: NOT_FOUND` responses for this single-page app.
+The local dev server serves the app HTML and the small FairShare API used by the browser.
