@@ -735,3 +735,110 @@ fieldset { margin: 0; border: 0; padding: 0; }
     flex-direction: column;
   }
 }
+
+.receipt-builder {
+  display: grid;
+  gap: 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--border));
+  border-radius: 18px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+}
+.receipt-builder-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.receipt-builder-heading p,
+.receipt-file-name {
+  margin: 0;
+  color: var(--muted);
+  font-size: .92rem;
+  line-height: 1.45;
+}
+.receipt-builder-heading strong {
+  color: var(--primary-dark);
+  font-size: 1.15rem;
+  white-space: nowrap;
+}
+.receipt-preview {
+  width: 100%;
+  max-height: 240px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  object-fit: contain;
+  background: var(--surface-strong);
+}
+.receipt-item-entry,
+.receipt-item-list {
+  display: grid;
+  gap: 10px;
+}
+.receipt-item-entry {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.checkbox-grid.compact { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.receipt-line-item {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  background: var(--surface-strong);
+}
+.receipt-line-item > div:first-child,
+.expense-item-breakdown li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.receipt-line-item strong,
+.expense-item-breakdown strong { color: var(--primary-dark); }
+.receipt-line-item button {
+  justify-self: start;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: var(--surface-strong);
+  color: var(--danger);
+  font-weight: 900;
+}
+.line-item-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mini-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  color: var(--ink);
+  font-size: .88rem;
+  font-weight: 800;
+}
+.mini-check input {
+  width: auto;
+  min-height: auto;
+}
+.expense-item-breakdown {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.expense-item-breakdown li {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+  color: var(--muted);
+  font-size: .9rem;
+}

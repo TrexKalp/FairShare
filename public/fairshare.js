@@ -14,6 +14,9 @@ const state = {
   splitAll: false,
   advancedSplit: false,
   splitShares: {},
+  receiptName: "",
+  receiptPreview: "",
+  receiptItems: [],
   expenseCurrency: null,
   theme: "light",
 };
@@ -38,6 +41,24 @@ const convertAmount = (value, fromCurrency, toCurrency) => {
   return roundCents(value * multiplier);
 };
 const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]);
+const uniquePeople = (names) => [...new Set(names.filter(Boolean))];
+const receiptTotal = () => roundCents(state.receiptItems.reduce((total, item) => total + Number(item.price || 0), 0));
+const receiptSplitShares = () => {
+  const shares = {};
+
+  state.receiptItems.forEach((item) => {
+    const assignedTo = item.assignedTo || [];
+    if (assignedTo.length === 0) return;
+
+    const share = roundCents(Number(item.price || 0) / assignedTo.length);
+    assignedTo.forEach((person, index) => {
+      const adjustedShare = index === assignedTo.length - 1 ? roundCents(Number(item.price || 0) - share * (assignedTo.length - 1)) : share;
+      shares[person] = roundCents(Number(shares[person] || 0) + adjustedShare);
+    });
+  });
+
+  return shares;
+};
 const googleLogo = `
   <svg class="google-mark" aria-hidden="true" viewBox="0 0 24 24">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -400,6 +421,43 @@ function renderAdvancedSplit() {
   `;
 }
 
+function renderReceiptBuilder({ hasPeople, canEdit, selectedCurrency }) {
+  const disabled = !hasPeople || state.saving || !canEdit;
+  const total = receiptTotal();
+
+  return `
+    <div class="receipt-builder" id="receipt-upload">
+      <div class="receipt-builder-heading">
+        <div>
+          <label for="receiptFile">Receipt upload</label>
+          <p>Upload a receipt image, then add each menu item and assign it to the people who ordered it. Item totals automatically become a custom split.</p>
+        </div>
+        ${state.receiptItems.length > 0 ? `<strong>${money(total, selectedCurrency)}</strong>` : ""}
+      </div>
+      <input id="receiptFile" type="file" accept="image/*,.pdf" ${disabled ? "disabled" : ""}/>
+      ${state.receiptName ? `<p class="receipt-file-name">Attached: ${escapeHtml(state.receiptName)}</p>` : ""}
+      ${state.receiptPreview ? `<img class="receipt-preview" src="${state.receiptPreview}" alt="Preview of ${escapeHtml(state.receiptName)}"/>` : ""}
+      <div class="receipt-item-entry">
+        <div><label for="receiptItemName">Menu item</label><input id="receiptItemName" placeholder="e.g. Veggie ramen" ${disabled ? "disabled" : ""}/></div>
+        <div><label for="receiptItemPrice">Price</label><input id="receiptItemPrice" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0.00" ${disabled ? "disabled" : ""}/></div>
+        <fieldset><legend>Assign item to</legend><div class="checkbox-grid compact">${state.people.map((person) => `
+          <label class="checkbox-card"><input type="checkbox" data-receipt-person="${escapeHtml(person)}" ${state.sharedBy.includes(person) ? "checked" : ""} ${disabled ? "disabled" : ""}/><span>${escapeHtml(person)}</span></label>
+        `).join("")}</div></fieldset>
+        <button class="secondary-button" type="button" id="addReceiptItem" ${disabled ? "disabled" : ""}>Add item</button>
+      </div>
+      ${state.receiptItems.length > 0 ? `<div class="receipt-item-list" aria-label="Receipt menu items">${state.receiptItems.map((item) => `
+        <article class="receipt-line-item">
+          <div><strong>${escapeHtml(item.name)}</strong><span>${money(item.price, selectedCurrency)}</span></div>
+          <div class="line-item-people">${state.people.map((person) => `
+            <label class="mini-check"><input type="checkbox" data-receipt-item-person="${escapeHtml(item.id)}::${escapeHtml(person)}" ${item.assignedTo.includes(person) ? "checked" : ""} ${disabled ? "disabled" : ""}/><span>${escapeHtml(person)}</span></label>
+          `).join("")}</div>
+          <button type="button" data-remove-receipt-item="${escapeHtml(item.id)}" ${disabled ? "disabled" : ""}>Remove</button>
+        </article>
+      `).join("")}</div>` : ""}
+    </div>
+  `;
+}
+
 function renderLedger() {
   if (state.expenses.length === 0) {
     return `<div class="empty-state">No expenses yet.</div>`;
@@ -419,7 +477,11 @@ function renderLedger() {
           ${(expense.currency || selectedCurrency) !== selectedCurrency ? `<span>Balances as <b>${money(convertAmount(expense.amount, expense.currency || selectedCurrency, selectedCurrency), selectedCurrency)}</b></span>` : ""}
           <span>Split with <b>${expense.splitAll ? "Everyone in trip" : expenseParticipants(expense).map(escapeHtml).join(", ")}</b></span>
           ${Object.keys(expenseSplitShares(expense)).length > 0 ? `<span><b>Custom split</b></span>` : ""}
+          ${expense.receiptName ? `<span>Receipt <b>${escapeHtml(expense.receiptName)}</b></span>` : ""}
         </div>
+        ${Array.isArray(expense.receiptItems) && expense.receiptItems.length > 0 ? `<ul class="expense-item-breakdown">${expense.receiptItems.map((item) => `
+          <li><span>${escapeHtml(item.name)} · ${item.assignedTo.map(escapeHtml).join(", ")}</span><strong>${money(item.price, expense.currency || selectedCurrency)}</strong></li>
+        `).join("")}</ul>` : ""}
       </div>
       <div class="expense-actions">
         <button type="button" data-edit="${escapeHtml(expense.id)}" ${state.saving || !state.user ? "disabled" : ""}>Edit</button>
@@ -539,14 +601,15 @@ function render() {
               <label for="description">What was it for?</label>
               <input id="description" placeholder="Hotel, groceries, tickets..." value="${escapeHtml(editingExpense?.description || "")}" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/>
               <div class="form-grid">
-                <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" value="${editingExpense ? editingExpense.amount : ""}" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/></div>
+                <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" value="${state.receiptItems.length > 0 ? receiptTotal() : editingExpense ? editingExpense.amount : ""}" ${state.receiptItems.length > 0 ? "readonly" : ""} ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/></div>
                 <div><label for="expenseCurrency">Currency</label><select id="expenseCurrency" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${Object.entries(currencyMeta).map(([code, meta]) => `<option value="${code}" ${code === selectedExpenseCurrency ? "selected" : ""}>${code} · ${meta.label}</option>`).join("")}</select></div>
                 <div><label for="paidBy">Paid by</label><select id="paidBy" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${state.people.map((person) => `<option value="${escapeHtml(person)}" ${person === editingExpense?.paidBy ? "selected" : ""}>${escapeHtml(person)}</option>`).join("")}</select></div>
               </div>
-              <label class="split-all-toggle"><input id="splitAll" type="checkbox" ${splitAllActive ? "checked" : ""} ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/><span>Split with everyone, including future joiners</span></label>
-              <label class="advanced-split-toggle"><input id="advancedSplit" type="checkbox" ${state.advancedSplit ? "checked" : ""} ${!hasPeople || splitAllActive || state.saving || !canEdit ? "disabled" : ""}/><span>Advanced split: enter custom amounts per person</span></label>
+              <label class="split-all-toggle"><input id="splitAll" type="checkbox" ${splitAllActive ? "checked" : ""} ${!hasPeople || state.receiptItems.length > 0 || state.saving || !canEdit ? "disabled" : ""}/><span>Split with everyone, including future joiners</span></label>
+              <label class="advanced-split-toggle"><input id="advancedSplit" type="checkbox" ${state.advancedSplit ? "checked" : ""} ${!hasPeople || splitAllActive || state.receiptItems.length > 0 || state.saving || !canEdit ? "disabled" : ""}/><span>Advanced split: enter custom amounts per person</span></label>
               <fieldset><legend>Split with</legend><div class="checkbox-grid">${renderSharedBy()}</div></fieldset>
               ${renderAdvancedSplit()}
+              ${renderReceiptBuilder({ hasPeople, canEdit, selectedCurrency: selectedExpenseCurrency })}
               <div class="form-actions">
                 <button class="wide-button" type="submit" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${editingExpense ? "Save changes" : "Add expense"}</button>
                 ${editingExpense ? `<button class="secondary-button" type="button" id="cancelEdit">Cancel</button>` : ""}
@@ -671,18 +734,92 @@ function bindEvents() {
     state.splitShares[input.dataset.splitShare] = input.value;
   }));
 
+  document.querySelector("#receiptFile")?.addEventListener("change", (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      state.receiptName = "";
+      state.receiptPreview = "";
+      render();
+      return;
+    }
+
+    state.receiptName = file.name;
+    state.receiptPreview = "";
+
+    if (!file.type.startsWith("image/")) {
+      render();
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      state.receiptPreview = typeof reader.result === "string" ? reader.result : "";
+      render();
+    });
+    reader.readAsDataURL(file);
+  });
+
+  document.querySelector("#addReceiptItem")?.addEventListener("click", () => {
+    const name = document.querySelector("#receiptItemName")?.value.trim();
+    const price = roundCents(Number(document.querySelector("#receiptItemPrice")?.value));
+    const assignedTo = uniquePeople([...document.querySelectorAll("[data-receipt-person]:checked")].map((input) => input.dataset.receiptPerson));
+
+    if (!name || price <= 0 || assignedTo.length === 0) return;
+
+    state.receiptItems = [...state.receiptItems, { id: crypto.randomUUID(), name, price, assignedTo }];
+    state.splitAll = false;
+    state.advancedSplit = true;
+    state.sharedBy = uniquePeople([...state.sharedBy, ...assignedTo]);
+    state.splitShares = receiptSplitShares();
+    render();
+  });
+
+  document.querySelectorAll("[data-receipt-item-person]").forEach((checkbox) => checkbox.addEventListener("change", () => {
+    const [itemId, person] = checkbox.dataset.receiptItemPerson.split("::");
+    state.receiptItems = state.receiptItems.map((item) => {
+      if (item.id !== itemId) return item;
+      const assignedTo = checkbox.checked ? uniquePeople([...item.assignedTo, person]) : item.assignedTo.filter((current) => current !== person);
+      return { ...item, assignedTo };
+    });
+    state.sharedBy = uniquePeople(state.receiptItems.flatMap((item) => item.assignedTo));
+    state.splitShares = receiptSplitShares();
+    render();
+  }));
+
+  document.querySelectorAll("[data-remove-receipt-item]").forEach((button) => button.addEventListener("click", () => {
+    state.receiptItems = state.receiptItems.filter((item) => item.id !== button.dataset.removeReceiptItem);
+    state.sharedBy = state.receiptItems.length > 0 ? uniquePeople(state.receiptItems.flatMap((item) => item.assignedTo)) : [...state.people];
+    state.splitShares = state.receiptItems.length > 0 ? receiptSplitShares() : {};
+    state.advancedSplit = state.receiptItems.length > 0;
+    render();
+  }));
+
   document.querySelector("#expenseForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const description = document.querySelector("#description").value.trim();
-    const amount = Number(document.querySelector("#amount").value);
+    const amount = state.receiptItems.length > 0 ? receiptTotal() : Number(document.querySelector("#amount").value);
     const currency = document.querySelector("#expenseCurrency").value;
     const paidBy = document.querySelector("#paidBy").value;
-    const splitAll = document.querySelector("#splitAll")?.checked || false;
-    const advancedSplit = document.querySelector("#advancedSplit")?.checked || false;
-    if (!description || !paidBy || (!splitAll && state.sharedBy.length === 0) || amount <= 0 || !state.activeTripId) return;
+    const hasReceiptItems = state.receiptItems.length > 0;
+    const splitAll = hasReceiptItems ? false : document.querySelector("#splitAll")?.checked || false;
+    const advancedSplit = hasReceiptItems ? true : document.querySelector("#advancedSplit")?.checked || false;
+    const sharedBy = hasReceiptItems ? uniquePeople(state.receiptItems.flatMap((item) => item.assignedTo)) : state.sharedBy;
+    if (!description || !paidBy || (!splitAll && sharedBy.length === 0) || amount <= 0 || !state.activeTripId) return;
 
-    const splitShares = {};
-    if (advancedSplit && !splitAll) {
+    let splitShares = {};
+    if (hasReceiptItems) {
+      if (state.receiptItems.some((item) => !item.assignedTo || item.assignedTo.length === 0)) {
+        window.alert("Assign every receipt item to at least one person.");
+        return;
+      }
+
+      splitShares = receiptSplitShares();
+      const receiptShareTotal = roundCents(Object.values(splitShares).reduce((total, share) => total + Number(share || 0), 0));
+      if (receiptShareTotal !== roundCents(amount)) {
+        window.alert(`Receipt item assignments must add up to ${money(roundCents(amount), currency)}.`);
+        return;
+      }
+    } else if (advancedSplit && !splitAll) {
       document.querySelectorAll("[data-split-share]").forEach((input) => {
         splitShares[input.dataset.splitShare] = Number(input.value);
       });
@@ -700,8 +837,10 @@ function bindEvents() {
       currency,
       paidBy,
       splitAll,
-      sharedBy: splitAll ? [] : state.sharedBy,
+      sharedBy: splitAll ? [] : sharedBy,
       splitShares: advancedSplit && !splitAll ? splitShares : null,
+      receiptName: state.receiptName,
+      receiptItems: state.receiptItems,
     };
 
     if (state.editingExpenseId) {
@@ -715,6 +854,9 @@ function bindEvents() {
         state.advancedSplit = false;
         state.splitShares = {};
         state.expenseCurrency = null;
+        state.receiptName = "";
+        state.receiptPreview = "";
+        state.receiptItems = [];
         return apiGroupFallback(group);
       });
       return;
@@ -726,6 +868,9 @@ function bindEvents() {
       state.advancedSplit = false;
       state.splitShares = {};
       state.expenseCurrency = null;
+      state.receiptName = "";
+      state.receiptPreview = "";
+      state.receiptItems = [];
       return group;
     });
   });
@@ -736,6 +881,9 @@ function bindEvents() {
     state.advancedSplit = false;
     state.splitShares = {};
     state.expenseCurrency = null;
+    state.receiptName = "";
+    state.receiptPreview = "";
+    state.receiptItems = [];
     state.sharedBy = [...state.people];
     render();
   });
@@ -750,6 +898,9 @@ function bindEvents() {
     state.splitShares = { ...expenseSplitShares(expense) };
     state.advancedSplit = Object.keys(state.splitShares).length > 0;
     state.expenseCurrency = expense.currency || activeCurrency();
+    state.receiptName = expense.receiptName || "";
+    state.receiptPreview = "";
+    state.receiptItems = Array.isArray(expense.receiptItems) ? expense.receiptItems : [];
     render();
     document.querySelector("#expenseForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }));
