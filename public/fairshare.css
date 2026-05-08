@@ -116,6 +116,37 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
   height: 22px;
   flex: 0 0 22px;
 }
+.signin-screen {
+  display: grid;
+  width: min(100%, 760px);
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+.signin-card {
+  width: min(100%, 560px);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: clamp(24px, 6vw, 42px);
+  background: rgba(255, 250, 242, .96);
+  box-shadow: var(--shadow);
+}
+.signin-brand { margin-bottom: 34px; }
+.signin-card h1 {
+  margin-bottom: 14px;
+  font-size: clamp(2.3rem, 8vw, 4.6rem);
+}
+.signin-card p:not(.eyebrow) {
+  margin-bottom: 28px;
+  color: var(--muted);
+  font-size: 1.08rem;
+  line-height: 1.6;
+}
+.signin-google {
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+}
 .mobile-hero { padding: 8px 18px 22px; }
 .eyebrow {
   margin: 0 0 8px;
@@ -421,6 +452,15 @@ fieldset { margin: 0; border: 0; padding: 0; }
 
 @media (max-width: 560px) {
   main { width: 100%; padding: 0 10px 38px; }
+  main.signin-screen {
+    width: 100%;
+    padding: 14px;
+  }
+  .signin-card {
+    border-radius: 22px;
+    padding: 22px;
+  }
+  .signin-google span:last-child { display: inline; }
   .app-header { border-radius: 0 0 24px 24px; border-top: 0; }
   .nav { padding: 12px; }
   .brand-mark { width: 38px; height: 38px; }

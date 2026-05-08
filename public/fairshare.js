@@ -236,7 +236,39 @@ function renderLedger() {
   `).join("");
 }
 
+function renderSignInScreen() {
+  const inviteCopy = state.inviteTripId
+    ? {
+        eyebrow: "Trip invite",
+        title: "Sign in to join this trip.",
+        body: "Use Google to join the shared trip, add your name automatically, and start adding expenses.",
+      }
+    : {
+        eyebrow: "FairShare",
+        title: "Sign in to split trips together.",
+        body: "Use Google to create trips, share links, add expenses, and settle up with everyone.",
+      };
+
+  document.querySelector("#app").innerHTML = `
+    <main class="signin-screen">
+      <section class="signin-card" aria-labelledby="signinTitle">
+        <div class="brand signin-brand"><span class="brand-mark">FS</span><span>FairShare</span></div>
+        <p class="eyebrow">${inviteCopy.eyebrow}</p>
+        <h1 id="signinTitle">${inviteCopy.title}</h1>
+        <p>${inviteCopy.body}</p>
+        ${state.error ? `<div class="notice error">${escapeHtml(state.error)}</div>` : ""}
+        <a class="google-button signin-google" href="${getGoogleLoginUrl()}">${googleLogo}<span>Continue with Google</span></a>
+      </section>
+    </main>
+  `;
+}
+
 function render() {
+  if (!state.loading && !state.user) {
+    renderSignInScreen();
+    return;
+  }
+
   const trip = activeTrip();
   const balances = getBalances(state.people, state.expenses);
   const settlements = settleGroup(balances);
