@@ -256,6 +256,24 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
   place-items: center;
   padding: 24px;
 }
+.loading-screen {
+  display: grid;
+  width: 100%;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+.loading-spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  border-top-color: var(--primary);
+  border-radius: 999px;
+  animation: spin 800ms linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 .signin-card {
   width: min(100%, 560px);
   border: 1px solid var(--border);
@@ -435,7 +453,8 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px 
   color: white;
 }
 .trip-panel select { margin-top: 16px; }
-.share-box {
+.share-box,
+.trip-details-form {
   display: grid;
   gap: 8px;
   margin-top: 18px;
@@ -444,7 +463,8 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px 
   padding: 14px;
   background: color-mix(in srgb, var(--primary) 12%, var(--surface));
 }
-.share-box label {
+.share-box label,
+.trip-details-form label {
   color: var(--primary-dark);
   font-size: .82rem;
   font-weight: 900;
@@ -467,6 +487,15 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px 
   color: white;
   font-weight: 900;
 }
+.trip-details-form button {
+  min-height: 44px;
+  border-radius: 12px;
+  padding: 10px 13px;
+  background: var(--primary);
+  color: white;
+  font-weight: 900;
+}
+.trip-details-form p,
 .share-box p, .helper-text {
   margin: 0;
   color: var(--muted);
@@ -491,8 +520,9 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px 
 .empty-inline { color: var(--muted); font-weight: 850; }
 
 .expense-form { display: grid; gap: 14px; }
-.form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.split-all-toggle {
+.form-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.split-all-toggle,
+.advanced-split-toggle {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -504,9 +534,37 @@ input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px 
   color: var(--primary-dark);
   font-weight: 900;
 }
-.split-all-toggle input {
+.split-all-toggle input,
+.advanced-split-toggle input {
   width: auto;
   min-height: auto;
+}
+.advanced-split-toggle {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.split-share-grid {
+  display: grid;
+  gap: 8px;
+}
+.split-share-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 160px);
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--surface-strong);
+}
+.split-share-row span {
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+.split-share-row input {
+  min-height: 42px;
 }
 .form-actions {
   display: grid;
@@ -661,6 +719,7 @@ fieldset { margin: 0; border: 0; padding: 0; }
   .inline-form div, .form-grid, .form-actions { grid-template-columns: 1fr; }
   .share-box div { grid-template-columns: 1fr; }
   .checkbox-grid { grid-template-columns: 1fr; }
+  .split-share-row { grid-template-columns: 1fr; }
   .expense-item {
     grid-template-columns: 1fr;
     align-items: stretch;

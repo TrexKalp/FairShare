@@ -12,12 +12,31 @@ const state = {
   copiedShareLink: false,
   editingExpenseId: null,
   splitAll: false,
+  advancedSplit: false,
+  splitShares: {},
+  expenseCurrency: null,
   theme: "light",
 };
 
-const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const roundCents = (value) => Math.round((value + Number.EPSILON) * 100) / 100;
-const money = (value) => currency.format(value);
+const eurToUsdRate = 1.174;
+const currencyMeta = {
+  USD: { label: "US dollar", locale: "en-US" },
+  EUR: { label: "Euro", locale: "de-DE" },
+};
+const currencyFormatters = {};
+const money = (value, currency = activeCurrency()) => {
+  if (!currencyFormatters[currency]) {
+    currencyFormatters[currency] = new Intl.NumberFormat(currencyMeta[currency]?.locale || "en-US", { style: "currency", currency });
+  }
+
+  return currencyFormatters[currency].format(value);
+};
+const convertAmount = (value, fromCurrency, toCurrency) => {
+  if (fromCurrency === toCurrency) return value;
+  const multiplier = fromCurrency === "EUR" && toCurrency === "USD" ? eurToUsdRate : 1 / eurToUsdRate;
+  return roundCents(value * multiplier);
+};
 const escapeHtml = (value) => String(value).replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char]);
 const googleLogo = `
   <svg class="google-mark" aria-hidden="true" viewBox="0 0 24 24">
@@ -101,8 +120,13 @@ function expenseParticipants(expense) {
   return expense.splitAll ? state.people : [];
 }
 
+function expenseSplitShares(expense) {
+  return expense.splitShares && typeof expense.splitShares === "object" && !Array.isArray(expense.splitShares) ? expense.splitShares : {};
+}
+
 function getBalances(people, expenses) {
   const balances = Object.fromEntries(people.map((person) => [person, 0]));
+  const displayCurrency = activeCurrency();
 
   expenses.forEach((expense) => {
     const participants = expenseParticipants(expense);
@@ -110,11 +134,25 @@ function getBalances(people, expenses) {
       return;
     }
 
-    balances[expense.paidBy] = roundCents((balances[expense.paidBy] || 0) + expense.amount);
-    const share = roundCents(expense.amount / participants.length);
+    const expenseCurrency = expense.currency || displayCurrency;
+    const displayAmount = convertAmount(expense.amount, expenseCurrency, displayCurrency);
+
+    balances[expense.paidBy] = roundCents((balances[expense.paidBy] || 0) + displayAmount);
+    const customShares = expenseSplitShares(expense);
+    const hasCustomShares = participants.some((person) => Number(customShares[person]) > 0);
+
+    if (hasCustomShares) {
+      participants.forEach((person) => {
+        const displayShare = convertAmount(Number(customShares[person] || 0), expenseCurrency, displayCurrency);
+        balances[person] = roundCents((balances[person] || 0) - displayShare);
+      });
+      return;
+    }
+
+    const share = roundCents(displayAmount / participants.length);
 
     participants.forEach((person, index) => {
-      const adjustedShare = index === participants.length - 1 ? roundCents(expense.amount - share * (participants.length - 1)) : share;
+      const adjustedShare = index === participants.length - 1 ? roundCents(displayAmount - share * (participants.length - 1)) : share;
       balances[person] = roundCents((balances[person] || 0) - adjustedShare);
     });
   });
@@ -185,12 +223,17 @@ function activeTrip() {
   return state.trips.find((trip) => trip.id === state.activeTripId) || null;
 }
 
+function activeCurrency() {
+  return activeTrip()?.currency || "USD";
+}
+
 function setGroup(group) {
   state.trips = group.trips || [];
   state.activeTripId = group.activeTripId;
   state.people = group.people || [];
   state.expenses = group.expenses || [];
   state.sharedBy = state.sharedBy.filter((person) => state.people.includes(person));
+  state.splitShares = Object.fromEntries(Object.entries(state.splitShares).filter(([person]) => state.people.includes(person)));
 
   if (state.sharedBy.length === 0) {
     state.sharedBy = [...state.people];
@@ -336,21 +379,46 @@ function renderSharedBy() {
   `).join("");
 }
 
+function renderAdvancedSplit() {
+  if (state.people.length === 0 || isSplitAllActive() || !state.advancedSplit) {
+    return "";
+  }
+
+  if (state.sharedBy.length === 0) {
+    return `<div class="empty-state compact">Choose who shares this expense before adding custom amounts.</div>`;
+  }
+
+  return `
+    <div class="split-share-grid" aria-label="Custom split amounts">
+      ${state.sharedBy.map((person) => `
+        <label class="split-share-row">
+          <span>${escapeHtml(person)}</span>
+          <input type="number" min="0" step="0.01" inputmode="decimal" data-split-share="${escapeHtml(person)}" value="${state.splitShares[person] ?? ""}" placeholder="0.00" ${state.saving || !state.user ? "disabled" : ""}/>
+        </label>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderLedger() {
   if (state.expenses.length === 0) {
     return `<div class="empty-state">No expenses yet.</div>`;
   }
+
+  const selectedCurrency = activeCurrency();
 
   return state.expenses.map((expense) => `
     <article class="expense-item">
       <div class="expense-main">
         <div class="expense-title-row">
           <h3>${escapeHtml(expense.description)}</h3>
-          <strong>${money(expense.amount)}</strong>
+          <strong>${money(expense.amount, expense.currency || selectedCurrency)}</strong>
         </div>
         <div class="expense-meta">
           <span>Paid by <b>${escapeHtml(expense.paidBy)}</b></span>
+          ${(expense.currency || selectedCurrency) !== selectedCurrency ? `<span>Balances as <b>${money(convertAmount(expense.amount, expense.currency || selectedCurrency, selectedCurrency), selectedCurrency)}</b></span>` : ""}
           <span>Split with <b>${expense.splitAll ? "Everyone in trip" : expenseParticipants(expense).map(escapeHtml).join(", ")}</b></span>
+          ${Object.keys(expenseSplitShares(expense)).length > 0 ? `<span><b>Custom split</b></span>` : ""}
         </div>
       </div>
       <div class="expense-actions">
@@ -390,12 +458,8 @@ function renderSignInScreen() {
 
 function renderLoadingScreen() {
   document.querySelector("#app").innerHTML = `
-    <main class="signin-screen">
-      <section class="signin-card" aria-live="polite">
-        <div class="brand signin-brand"><span class="brand-mark" aria-hidden="true"><img src="/fairshare-logo.png?v=2" alt=""/></span><span>FairShare</span></div>
-        <p class="eyebrow">Loading</p>
-        <h1>Checking your session.</h1>
-      </section>
+    <main class="loading-screen" aria-live="polite" aria-label="Loading">
+      <div class="loading-spinner" role="status"></div>
     </main>
   `;
 }
@@ -412,13 +476,15 @@ function render() {
   }
 
   const trip = activeTrip();
+  const selectedCurrency = activeCurrency();
   const balances = getBalances(state.people, state.expenses);
   const settlements = settleGroup(balances);
-  const totalSpend = state.expenses.reduce((total, expense) => total + expense.amount, 0);
+  const totalSpend = state.expenses.reduce((total, expense) => total + convertAmount(expense.amount, expense.currency || selectedCurrency, selectedCurrency), 0);
   const hasTrip = Boolean(state.activeTripId);
   const hasPeople = state.people.length > 0;
   const canEdit = Boolean(state.user);
   const editingExpense = currentEditingExpense();
+  const selectedExpenseCurrency = state.expenseCurrency || editingExpense?.currency || selectedCurrency;
   const splitAllActive = isSplitAllActive();
   const status = state.loading ? "Loading..." : state.saving ? "Saving..." : "Synced";
   const authControl = renderProfileControl();
@@ -437,7 +503,7 @@ function render() {
           <p>Create a trip, share its link, and each person joins with Google so their name is added automatically.</p>
         </section>
         <section class="stats-grid" aria-label="Trip summary">
-          <div><span>Total</span><strong>${money(totalSpend)}</strong></div>
+          <div><span>Total</span><strong>${money(totalSpend, selectedCurrency)}</strong></div>
           <div><span>Expenses</span><strong>${state.expenses.length}</strong></div>
           <div><span>People</span><strong>${state.people.length}</strong></div>
           <div><span>Status</span><strong>${escapeHtml(status)}</strong></div>
@@ -456,6 +522,7 @@ function render() {
             <div><input id="tripName" placeholder="e.g. Lisbon weekend" ${state.saving || !canEdit ? "disabled" : ""}/><button type="submit" ${state.saving || !canEdit ? "disabled" : ""}>Add</button></div>
           </form>
           ${renderTripOptions()}
+          ${hasTrip ? `<form class="trip-details-form" id="tripDetailsForm"><label for="tripDetailsName">Trip details</label><input id="tripDetailsName" value="${escapeHtml(trip?.name || "")}" ${state.saving || !canEdit ? "disabled" : ""}/><select id="displayCurrency" aria-label="Final balance currency" ${state.saving || !canEdit ? "disabled" : ""}>${Object.entries(currencyMeta).map(([code, meta]) => `<option value="${code}" ${code === selectedCurrency ? "selected" : ""}>${code} · ${meta.label}</option>`).join("")}</select><button type="submit" ${state.saving || !canEdit ? "disabled" : ""}>Save details</button><p>Expense currencies stay as entered. Balances and settlements show in this currency.</p></form>` : ""}
           ${hasTrip ? `<div class="share-box"><label for="shareLink">Share trip link</label><div><input id="shareLink" value="${escapeHtml(shareLink)}" readonly/><button type="button" id="copyShareLink">${state.copiedShareLink ? "Copied" : "Copy"}</button></div><p>When someone opens this link and signs in, they join this trip automatically.</p></div>` : ""}
         </aside>
 
@@ -473,10 +540,13 @@ function render() {
               <input id="description" placeholder="Hotel, groceries, tickets..." value="${escapeHtml(editingExpense?.description || "")}" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/>
               <div class="form-grid">
                 <div><label for="amount">Amount</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0.00" inputmode="decimal" value="${editingExpense ? editingExpense.amount : ""}" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/></div>
+                <div><label for="expenseCurrency">Currency</label><select id="expenseCurrency" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${Object.entries(currencyMeta).map(([code, meta]) => `<option value="${code}" ${code === selectedExpenseCurrency ? "selected" : ""}>${code} · ${meta.label}</option>`).join("")}</select></div>
                 <div><label for="paidBy">Paid by</label><select id="paidBy" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${state.people.map((person) => `<option value="${escapeHtml(person)}" ${person === editingExpense?.paidBy ? "selected" : ""}>${escapeHtml(person)}</option>`).join("")}</select></div>
               </div>
               <label class="split-all-toggle"><input id="splitAll" type="checkbox" ${splitAllActive ? "checked" : ""} ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}/><span>Split with everyone, including future joiners</span></label>
+              <label class="advanced-split-toggle"><input id="advancedSplit" type="checkbox" ${state.advancedSplit ? "checked" : ""} ${!hasPeople || splitAllActive || state.saving || !canEdit ? "disabled" : ""}/><span>Advanced split: enter custom amounts per person</span></label>
               <fieldset><legend>Split with</legend><div class="checkbox-grid">${renderSharedBy()}</div></fieldset>
+              ${renderAdvancedSplit()}
               <div class="form-actions">
                 <button class="wide-button" type="submit" ${!hasPeople || state.saving || !canEdit ? "disabled" : ""}>${editingExpense ? "Save changes" : "Add expense"}</button>
                 ${editingExpense ? `<button class="secondary-button" type="button" id="cancelEdit">Cancel</button>` : ""}
@@ -489,11 +559,11 @@ function render() {
       <section class="results-grid">
         <div class="panel" id="settle">
           <div class="section-heading"><p class="eyebrow">Settle up</p><h2>Who pays who?</h2></div>
-          ${settlements.length === 0 ? `<div class="empty-state">Everyone is already settled.</div>` : `<ol class="settlement-list">${settlements.map((settlement) => `<li><span>${escapeHtml(settlement.from)} pays ${escapeHtml(settlement.to)}</span><strong>${money(settlement.amount)}</strong></li>`).join("")}</ol>`}
+          ${settlements.length === 0 ? `<div class="empty-state">Everyone is already settled.</div>` : `<ol class="settlement-list">${settlements.map((settlement) => `<li><span>${escapeHtml(settlement.from)} pays ${escapeHtml(settlement.to)}</span><strong>${money(settlement.amount, selectedCurrency)}</strong></li>`).join("")}</ol>`}
         </div>
         <div class="panel">
           <div class="section-heading"><p class="eyebrow">Balances</p><h2>Who is owed?</h2></div>
-          <div class="balance-list">${hasPeople ? Object.entries(balances).map(([person, balance]) => `<div class="balance-row"><span>${escapeHtml(person)}</span><strong class="${balance >= 0 ? "positive" : "negative"}">${money(balance)}</strong></div>`).join("") : `<div class="empty-state">Share the trip link so people can join.</div>`}</div>
+          <div class="balance-list">${hasPeople ? Object.entries(balances).map(([person, balance]) => `<div class="balance-row"><span>${escapeHtml(person)}</span><strong class="${balance >= 0 ? "positive" : "negative"}">${money(balance, selectedCurrency)}</strong></div>`).join("") : `<div class="empty-state">Share the trip link so people can join.</div>`}</div>
         </div>
       </section>
 
@@ -533,6 +603,18 @@ function bindEvents() {
     }, 1800);
   });
 
+  document.querySelector("#tripDetailsForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = document.querySelector("#tripDetailsName").value.trim();
+    const currency = document.querySelector("#displayCurrency").value;
+    if (!state.activeTripId || !name) return;
+
+    saveAction(() => api(`/api/trips/${encodeURIComponent(state.activeTripId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name, currency }),
+    }));
+  });
+
   document.querySelector("#tripSelect")?.addEventListener("change", (event) => {
     state.loading = true;
     render();
@@ -548,30 +630,79 @@ function bindEvents() {
   document.querySelectorAll("[data-person]").forEach((checkbox) => checkbox.addEventListener("change", () => {
     const person = checkbox.dataset.person;
     state.sharedBy = checkbox.checked ? [...state.sharedBy, person] : state.sharedBy.filter((current) => current !== person);
+    if (!checkbox.checked) {
+      delete state.splitShares[person];
+    }
+    if (state.advancedSplit) {
+      render();
+    }
   }));
 
   document.querySelector("#splitAll")?.addEventListener("change", (event) => {
     state.splitAll = event.target.checked;
     if (state.splitAll) {
       state.sharedBy = [...state.people];
+      state.advancedSplit = false;
+      state.splitShares = {};
     } else {
       const expense = currentEditingExpense();
       if (expense) {
         state.sharedBy = [...expense.sharedBy];
+        state.splitShares = { ...expenseSplitShares(expense) };
+        state.advancedSplit = Object.keys(state.splitShares).length > 0;
       }
     }
     render();
   });
 
+  document.querySelector("#advancedSplit")?.addEventListener("change", (event) => {
+    state.advancedSplit = event.target.checked;
+    if (!state.advancedSplit) {
+      state.splitShares = {};
+    }
+    render();
+  });
+
+  document.querySelector("#expenseCurrency")?.addEventListener("change", (event) => {
+    state.expenseCurrency = event.target.value;
+  });
+
+  document.querySelectorAll("[data-split-share]").forEach((input) => input.addEventListener("input", () => {
+    state.splitShares[input.dataset.splitShare] = input.value;
+  }));
+
   document.querySelector("#expenseForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const description = document.querySelector("#description").value.trim();
     const amount = Number(document.querySelector("#amount").value);
+    const currency = document.querySelector("#expenseCurrency").value;
     const paidBy = document.querySelector("#paidBy").value;
     const splitAll = document.querySelector("#splitAll")?.checked || false;
+    const advancedSplit = document.querySelector("#advancedSplit")?.checked || false;
     if (!description || !paidBy || (!splitAll && state.sharedBy.length === 0) || amount <= 0 || !state.activeTripId) return;
 
-    const payload = { tripId: state.activeTripId, description, amount: roundCents(amount), paidBy, splitAll, sharedBy: splitAll ? [] : state.sharedBy };
+    const splitShares = {};
+    if (advancedSplit && !splitAll) {
+      document.querySelectorAll("[data-split-share]").forEach((input) => {
+        splitShares[input.dataset.splitShare] = Number(input.value);
+      });
+      const customTotal = roundCents(Object.values(splitShares).reduce((total, share) => total + Number(share || 0), 0));
+      if (customTotal !== roundCents(amount)) {
+        window.alert(`Custom split amounts must add up to ${money(roundCents(amount), currency)}.`);
+        return;
+      }
+    }
+
+    const payload = {
+      tripId: state.activeTripId,
+      description,
+      amount: roundCents(amount),
+      currency,
+      paidBy,
+      splitAll,
+      sharedBy: splitAll ? [] : state.sharedBy,
+      splitShares: advancedSplit && !splitAll ? splitShares : null,
+    };
 
     if (state.editingExpenseId) {
       saveAction(async () => {
@@ -581,6 +712,9 @@ function bindEvents() {
         });
         state.editingExpenseId = null;
         state.splitAll = false;
+        state.advancedSplit = false;
+        state.splitShares = {};
+        state.expenseCurrency = null;
         return apiGroupFallback(group);
       });
       return;
@@ -589,6 +723,9 @@ function bindEvents() {
     saveAction(async () => {
       const group = await api("/api/expenses", { method: "POST", body: JSON.stringify(payload) });
       state.splitAll = false;
+      state.advancedSplit = false;
+      state.splitShares = {};
+      state.expenseCurrency = null;
       return group;
     });
   });
@@ -596,6 +733,9 @@ function bindEvents() {
   document.querySelector("#cancelEdit")?.addEventListener("click", () => {
     state.editingExpenseId = null;
     state.splitAll = false;
+    state.advancedSplit = false;
+    state.splitShares = {};
+    state.expenseCurrency = null;
     state.sharedBy = [...state.people];
     render();
   });
@@ -607,6 +747,9 @@ function bindEvents() {
     state.editingExpenseId = expense.id;
     state.splitAll = Boolean(expense.splitAll);
     state.sharedBy = [...expenseParticipants(expense)];
+    state.splitShares = { ...expenseSplitShares(expense) };
+    state.advancedSplit = Object.keys(state.splitShares).length > 0;
+    state.expenseCurrency = expense.currency || activeCurrency();
     render();
     document.querySelector("#expenseForm")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }));

@@ -19,6 +19,7 @@ const {
   deleteExpense: removeExpense,
   getGroup,
   joinTrip,
+  updateTripDetails,
   updateExpense: saveExpenseUpdate,
 } = fairshareDb;
 
@@ -133,6 +134,12 @@ async function joinExistingTrip(request, response, user) {
   sendJson(response, 200, await joinTrip({ tripId: body.tripId, user }));
 }
 
+async function updateTrip(request, response, pathname, user) {
+  const tripId = decodeURIComponent(pathname.replace("/api/trips/", ""));
+  const body = await readJson(request);
+  sendJson(response, 200, await updateTripDetails({ tripId, name: body.name, currency: body.currency, user }));
+}
+
 async function handleApiRequest(request, response) {
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
@@ -175,6 +182,13 @@ async function handleApiRequest(request, response) {
       const user = await requireUser(request, response);
       if (!user) return true;
       await joinExistingTrip(request, response, user);
+      return true;
+    }
+
+    if (request.method === "PATCH" && url.pathname.startsWith("/api/trips/")) {
+      const user = await requireUser(request, response);
+      if (!user) return true;
+      await updateTrip(request, response, url.pathname, user);
       return true;
     }
 
