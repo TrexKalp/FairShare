@@ -116,6 +116,37 @@ main { width: min(1180px, calc(100% - 28px)); margin: 0 auto; padding: 16px 0 56
   min-height: auto;
   cursor: pointer;
 }
+.profile-form {
+  margin: 0;
+}
+.profile-button {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0;
+  background: var(--surface-strong);
+  color: var(--primary-dark);
+  font-size: .84rem;
+  font-weight: 950;
+}
+.profile-button img,
+.profile-button span {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.profile-button img {
+  object-fit: cover;
+}
+.profile-button span {
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface-strong));
+}
 .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -562,6 +593,7 @@ fieldset { margin: 0; border: 0; padding: 0; }
   }
   .nav a, .auth-form button, .google-button, .theme-toggle { padding: 9px 12px; font-size: .9rem; }
   .theme-toggle { padding: 0; }
+  .profile-button { width: 42px; height: 42px; }
   .auth-form { justify-content: flex-end; }
   .auth-form span { max-width: 120px; font-size: .82rem; }
   .signin-panel > span { display: none; }

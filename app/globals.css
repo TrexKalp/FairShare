@@ -132,7 +132,8 @@ main {
 }
 
 .nav a,
-.theme-toggle {
+.theme-toggle,
+.profile-button {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 10px 16px;
@@ -141,7 +142,8 @@ main {
   font-weight: 700;
 }
 
-.theme-toggle {
+.theme-toggle,
+.profile-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -149,6 +151,16 @@ main {
   height: 44px;
   flex: 0 0 44px;
   padding: 0;
+}
+
+.profile-button svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .theme-icon,
@@ -167,6 +179,7 @@ main {
 }
 
 .theme-toggle:hover,
+.profile-button:hover,
 .nav a:hover,
 .button:hover,
 .inline-form button:hover,

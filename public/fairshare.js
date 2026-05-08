@@ -56,6 +56,36 @@ function renderThemeToggle() {
   `;
 }
 
+function getInitials(name = "") {
+  const initials = name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("");
+
+  return initials || "FS";
+}
+
+function renderProfileControl() {
+  if (!state.user) {
+    return `<div class="signin-panel" aria-label="Sign in"><span>Sign in</span><a class="google-button" href="${getGoogleLoginUrl()}">${googleLogo}<span>Continue with Google</span></a></div>`;
+  }
+
+  const name = escapeHtml(state.user.name);
+  const picture = state.user.picture
+    ? `<img src="${escapeHtml(state.user.picture)}" alt=""/>`
+    : `<span>${escapeHtml(getInitials(state.user.name))}</span>`;
+
+  return `
+    <form class="profile-form" method="post" action="/api/auth/logout" aria-label="Profile">
+      <button class="profile-button" type="submit" aria-label="Sign out ${name}" title="${name}">
+        ${picture}
+      </button>
+    </form>
+  `;
+}
+
 function expenseParticipants(expense) {
   if (Array.isArray(expense.sharedBy) && expense.sharedBy.length > 0) {
     return expense.sharedBy;
@@ -362,9 +392,7 @@ function render() {
   const editingExpense = currentEditingExpense();
   const splitAllActive = isSplitAllActive();
   const status = state.loading ? "Loading..." : state.saving ? "Saving..." : "Synced";
-  const authControl = state.user
-    ? `<form class="auth-form" method="post" action="/api/auth/logout"><span>${escapeHtml(state.user.name)}</span><button type="submit">Sign out</button></form>`
-    : `<div class="signin-panel" aria-label="Sign in"><span>Sign in</span><a class="google-button" href="${getGoogleLoginUrl()}">${googleLogo}<span>Continue with Google</span></a></div>`;
+  const authControl = renderProfileControl();
   const shareLink = hasTrip ? getTripLink(state.activeTripId) : "";
 
   document.querySelector("#app").innerHTML = `
@@ -372,7 +400,7 @@ function render() {
       <header class="app-header">
         <nav class="nav" aria-label="Primary navigation">
           <div class="brand"><span class="brand-mark" aria-hidden="true"><img src="/fairshare-logo.png?v=2" alt=""/></span><span>FairShare</span></div>
-          <div class="nav-actions">${renderThemeToggle()}<a href="#expenseForm">Add expense</a>${authControl}</div>
+          <div class="nav-actions">${renderThemeToggle()}${authControl}</div>
         </nav>
         <section class="mobile-hero">
           <p class="eyebrow">Shared trip ledger</p>
