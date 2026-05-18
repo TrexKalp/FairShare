@@ -2,6 +2,8 @@
 
 FairShare is a shared trip expense balancer. Create trips, share a join link, record shared expenses from multiple browsers, and instantly see the simplest settlement plan for each trip.
 
+Live app: https://fairshare-jncl.onrender.com
+
 ## Getting started
 
 ```bash
@@ -32,13 +34,28 @@ GOOGLE_CLIENT_SECRET=your_google_client_secret
 - Generate a simplified settlement plan that minimizes the number of payments.
 - Remove expenses from the ledger and recalculate instantly.
 
-## Deploying to Vercel
+## Deploying to Render
 
-Use these settings if you configure the project manually:
+FairShare is deployed as a Render Web Service:
 
-- Install command: `npm ci`
-- Build command: `npm run build`
-- Output directory: `out`
-- Environment variable: `DATABASE_URL`
+- Live app: https://fairshare-jncl.onrender.com
+- Environment: Node
+- Branch: `main`
+- Build command: `npm ci && npm run build`
+- Start command: `npm run start`
 
-The local dev server serves the app HTML and the small FairShare API used by the browser.
+Set these environment variables in Render:
+
+```bash
+DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+```
+
+The Google OAuth client must include the deployed callback URL:
+
+```text
+https://fairshare-jncl.onrender.com/api/auth/google/callback
+```
+
+The local dev server serves the app HTML and the FairShare API used by the browser.
