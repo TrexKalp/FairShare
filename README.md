@@ -4,6 +4,8 @@ FairShare is a shared trip expense balancer. Create trips, share a join link, re
 
 Live app: https://fairshare-jncl.onrender.com
 
+FairShare is open source. To run or deploy your own instance, contact tejaskalpathi [at] google mail for environment details.
+
 ## Getting started
 
 ```bash
@@ -20,6 +22,8 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=require
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
 ```
+
+Contact tejaskalpathi [at] google mail if you need the shared development environment details.
 
 ## Features
 
